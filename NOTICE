@@ -1,1 +1,19 @@
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+This product includes the following third-party components:
+
+- rsl_rl (reinforcement learning library)
+  Copyright (c) 2021, ETH Zurich, Nikita Rudin
+  Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES
+  License: BSD-3-Clause (see rsl_rl/LICENSE)
+
+- legged_gym (simulation and environment framework)
+  Copyright (c) 2021, ETH Zurich, Nikita Rudin
+  Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES
+  License: BSD-3-Clause (see legged_gym/LICENSE)
+
+- a1 robot asset
+  License: Mozilla Public License 2.0 (see legged_gym/licenses/assets/a1_license.txt)
+
+- Additional assets and dependency licenses
+  See legged_gym/licenses and rsl_rl/licenses for detailed third-party license information.

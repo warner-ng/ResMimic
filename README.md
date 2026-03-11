@@ -1,11 +1,94 @@
-## My Project
+# ResMimic: From General Motion Tracking to Humanoid Whole-Body Loco-Manipulation via Residual Learning
 
-TODO: Fill this README out!
+**Siheng Zhao**, Yanjie Ze, Yue Wang, C. Karen Liu†, Pieter Abbeel†, Guanya Shi†, Rocky Duan†  
+*† Equal Advising · 2025*
 
-Be sure to:
+[**Website**](https://resmimic.github.io/) · [**arXiv**](https://arxiv.org/abs/2510.05070) · [**Video**](https://www.youtube.com/watch?v=dadOH-TpbRk)
 
-* Change the title in this README
-* Edit your repository description on GitHub
+
+---
+
+## Table of Contents
+
+- [Installation](#installation)
+- [Usage](#usage)
+- [Citation and Contact](#citation-and-contact)
+- [Acknowledgments](#acknowledgments)
+
+---
+
+## Installation
+
+One-time setup (creates environment and installs dependencies):
+
+```bash
+source setup_dev.sh
+```
+
+Each time you open a new terminal, activate the environment:
+
+```bash
+source source_dev_setup.sh
+```
+
+---
+
+## Usage
+
+### Training
+
+Train the residual policy with the provided config. You need to pass your Weights & Biases entity (username or team):
+
+```bash
+./train.sh <wandb_entity>
+```
+
+Example: `./train.sh my_username`
+
+### Evaluation
+
+Run evaluation (play) for a trained run. From the repository root:
+
+```bash
+./eval.sh <wandb_run_id> <checkpoint_iter>
+```
+
+Example: `./eval.sh abc123def 5000` runs evaluation for run `abc123def` at checkpoint iteration 5000.
+
+Optional: uncomment `--record_video` in `eval.sh` to save videos.
+
+---
+
+## Citation and Contact
+
+If you find this work useful, please cite:
+
+```bibtex
+@article{zhao2025resmimic,
+title={ResMimic: From General Motion Tracking to Humanoid Whole-body Loco-Manipulation via Residual Learning}, 
+author={Siheng Zhao and Yanjie Ze and Yue Wang and C. Karen Liu and Pieter Abbeel and Guanya Shi and Rocky Duan},
+year={2025},
+journal= {arXiv preprint arXiv:2510.05070}
+}
+```
+And also consider citing the related works:
+```bibtex
+@article{ze2025twist2,
+title={TWIST2: Scalable, Portable, and Holistic Humanoid Data Collection System},
+author= {Yanjie Ze and Siheng Zhao and Weizhuo Wang and Angjoo Kanazawa and Rocky Duan and Pieter Abbeel and Guanya Shi and Jiajun Wuand C. Karen Liu},
+year= {2025},
+journal= {arXiv preprint arXiv:2511.02832}
+}
+```
+
+Questions: [sihengz@usc.edu](mailto:sihengz@usc.edu)
+
+---
+
+## Acknowledgments
+
+This codebase is built on [TWIST2](https://github.com/amazon-far/TWIST2).
+
 
 ## Security
 
