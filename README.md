@@ -98,3 +98,10 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 
 This project is licensed under the Apache-2.0 License.
 
+This repository builds upon third-party open-source projects, including
+[`legged_gym`](https://github.com/leggedrobotics/legged_gym) and
+[`rsl_rl`](https://github.com/leggedrobotics/rsl_rl). These components have been modified to support our use case. The original
+LICENSE files in their respective subdirectories are retained and continue to
+govern those portions of the code. All rights and attribution remain with the
+original authors in accordance with their licenses.
+
