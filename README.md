@@ -46,6 +46,21 @@ Train the residual policy with the provided config. You need to pass your Weight
 
 Example: `./train.sh my_username`
 
+Viewer mode (interactive window):
+
+```bash
+source source_dev_setup.sh
+python legged_gym/legged_gym/scripts/train.py --task "g1_hoi_bike" \
+	--proj_name "resmimic_bike" --exptid "bike_top_tube" --device cuda:0 \
+	--teacher_exptid None --num_envs 512 --wandb_entity warner0709-shanghai-ai-lab
+
+python legged_gym/legged_gym/scripts/train.py --task "g1_hoi_bike" \
+        --proj_name "resmimic_bike" --exptid "bike_top_tube" --device cuda:0 \
+        --teacher_exptid None --num_envs 4096 --wandb_entity warner0709-shanghai-ai-lab --headless
+```
+
+Note: omit `--headless` to keep the viewer on.
+
 ### Evaluation
 
 Run evaluation (play) for a trained run. From the repository root:
@@ -59,6 +74,24 @@ Run evaluation (play) for a trained run. From the repository root:
 Example: `./eval.sh abc123def 5000` runs evaluation for run `abc123def` at checkpoint iteration 5000.
 
 Optional: uncomment `--record_video` in `eval.sh` to save videos.
+
+Bike HOI evaluation (checkpoint-based, with video recording):
+
+```bash
+source source_dev_setup.sh
+cd legged_gym/legged_gym/scripts
+python play_residual.py --task "g1_hoi_bike" \
+	--proj_name "resmimic_bike" \
+        --exptid "bike_top_tube" \
+        --checkpoint 200 \
+	--num_envs 1\
+        --device "cuda:0" \
+        --teacher_exptid None \
+        --teacher_checkpoint -1 \
+	--no_wandb \
+        --wandb_entity warner0709-shanghai-ai-lab \
+        --record_video
+```
 
 ---
 

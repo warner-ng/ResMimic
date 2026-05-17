@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<robot name="bike_top_tube_single_vscode">
+  <link name="bike_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resmimic_assets/bicycle_top_tube/meshes/bike_top_tube_merged.obj"/>
+      </geometry>
+    </visual>
+  </link>
+</robot>
