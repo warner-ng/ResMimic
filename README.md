@@ -41,6 +41,7 @@ Train the residual policy with the provided config. You need to pass your Weight
 
 ```bash
 ./train.sh <wandb_entity>
+./train.sh warner0709-shanghai-ai-lab
 ```
 
 Example: `./train.sh my_username`
@@ -51,6 +52,8 @@ Run evaluation (play) for a trained run. From the repository root:
 
 ```bash
 ./eval.sh <wandb_run_id> <checkpoint_iter>
+
+./eval.sh ou43tqqk 900 --record_video
 ```
 
 Example: `./eval.sh abc123def 5000` runs evaluation for run `abc123def` at checkpoint iteration 5000.

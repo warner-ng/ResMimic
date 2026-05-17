@@ -32,6 +32,7 @@
 # DeepMimic (for HOI)
 from .g1.g1_hoi import G1HOI
 from .g1.g1_hoi_config import G1HOICfg, G1HOICfgDAgger
+from .g1.g1_hoi_bike_config import G1HOIBikeCfg, G1HOIBikeCfgDAgger
 
 from legged_gym.gym_utils.task_registry import task_registry
 
@@ -40,3 +41,4 @@ from legged_gym.gym_utils.task_registry import task_registry
 
 # DeepMimic (for HOI)
 task_registry.register("g1_hoi", G1HOI, G1HOICfg(), G1HOICfgDAgger())
+task_registry.register("g1_hoi_bike", G1HOI, G1HOIBikeCfg(), G1HOIBikeCfgDAgger())

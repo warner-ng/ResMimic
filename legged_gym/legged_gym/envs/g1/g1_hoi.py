@@ -166,7 +166,7 @@ class G1HOI(G1MimicFuture):
                                               gymtorch.unwrap_tensor(self.dof_state),
                                               gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
 
-
+    # places for visualising objects and keypoints in issacgym
     def _load_object_asset(self):
         object_asset_root = self.cfg.env.object_asset_root
         object_urdf_file = self.cfg.env.object_urdf_file

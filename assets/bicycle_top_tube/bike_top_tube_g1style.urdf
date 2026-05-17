@@ -1,0 +1,59 @@
+<?xml version="1.0" ?>
+<robot name="bike_top_tube">
+  <link name="frame">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/frame.STL" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <link name="front_fork_1">
+    <visual>
+      <origin xyz="0.061665 0.0 -0.286333" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/front_fork_1.STL" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <link name="front_wheel_1">
+    <visual>
+      <origin xyz="-0.175163 0.084 0.267533" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/front_wheel_1.STL" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <link name="back_wheel_1">
+    <visual>
+      <origin xyz="0.84811 0.08 0.267533" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/back_wheel_1.STL" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="Rev2" type="continuous">
+    <origin xyz="-0.061665 0.0 0.286333" rpy="0 0 0"/>
+    <parent link="frame"/>
+    <child link="front_fork_1"/>
+    <axis xyz="0.34202 0.0 -0.939693"/>
+  </joint>
+
+  <joint name="Rev1" type="continuous">
+    <origin xyz="0.236828 -0.084 -0.553866" rpy="0 0 0"/>
+    <parent link="front_fork_1"/>
+    <child link="front_wheel_1"/>
+    <axis xyz="0.0 -1.0 0.0"/>
+  </joint>
+
+  <joint name="Rev3" type="continuous">
+    <origin xyz="-0.84811 -0.08 -0.267533" rpy="0 0 0"/>
+    <parent link="frame"/>
+    <child link="back_wheel_1"/>
+    <axis xyz="0.0 1.0 0.0"/>
+  </joint>
+</robot>

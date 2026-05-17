@@ -209,6 +209,9 @@ def play(args):
                 normalized_obs = normalizer.normalize(obs.detach())
             else:
                 normalized_obs = obs.detach()
+                
+            # this is the key for residual learning:
+            # we add the base policy actions to the student policy actions
             base_actions = base_policy_jit(full_obs_to_base_obs(env_cfg, obs.detach()))
             actions = policy(normalized_obs, hist_encoding=True) + base_actions
             
