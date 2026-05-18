@@ -6,6 +6,7 @@ import numpy as np
 from isaacgym.torch_utils import *
 from isaacgym import gymapi
 from isaacgym import gymtorch
+from isaacgym import gymutil
 
 import trimesh
 import torch
@@ -486,6 +487,8 @@ class G1HOI(G1MimicFuture):
             self.gym.clear_lines(self.viewer)
             self.draw_key_bodies_actual()
             self.draw_key_bodies_motion()
+            self.draw_object_points_actual()
+            self.draw_object_points_motion()
 
 
     def step(self, actions):
@@ -784,6 +787,38 @@ class G1HOI(G1MimicFuture):
     def _reward_tracking_object_point_cloud(self):
         object_point_cloud_scale = 10.0
         return torch.exp(-object_point_cloud_scale * self.object_point_cloud_dist)
+
+    def _get_object_points_world(self, root_pos, root_rot, max_points=128):
+        # Downsample for visualization performance
+        stride = max(1, self.object_points.shape[0] // max_points)
+        obj_points = self.object_points[::stride]
+        # Rotate and translate to world
+        obj_rot_extend = root_rot.unsqueeze(1).repeat(1, obj_points.shape[0], 1).view(-1, 4)
+        obj_points_extend = obj_points.unsqueeze(0).repeat(root_rot.shape[0], 1, 1).view(-1, 3)
+        world_points = quat_rotate(obj_rot_extend, obj_points_extend).view(root_rot.shape[0], obj_points.shape[0], 3)
+        world_points = world_points + root_pos.unsqueeze(1)
+        return world_points
+
+    # actual point cloud in yellow, 
+    def draw_object_points_actual(self):
+        if self.viewer is None:
+            return
+        geom = gymutil.WireframeSphereGeometry(0.02, 12, 12, None, color=(1, 1, 0))
+        obj_points_world = self._get_object_points_world(self.object_root_states[:, :3], self.object_root_states[:, 3:7])
+        for env_id in range(self.num_envs):
+            for i in range(obj_points_world.shape[1]):
+                pose = gymapi.Transform(gymapi.Vec3(obj_points_world[env_id, i, 0], obj_points_world[env_id, i, 1], obj_points_world[env_id, i, 2]), r=None)
+                gymutil.draw_lines(geom, self.gym, self.viewer, self.envs[env_id], pose)
+    # reference motion point cloud in green
+    def draw_object_points_motion(self):
+        if self.viewer is None:
+            return
+        geom = gymutil.WireframeSphereGeometry(0.02, 12, 12, None, color=(0, 1, 0))
+        ref_points_world = self._get_object_points_world(self._ref_object_root_pos, self._ref_object_root_rot)
+        for env_id in range(self.num_envs):
+            for i in range(ref_points_world.shape[1]):
+                pose = gymapi.Transform(gymapi.Vec3(ref_points_world[env_id, i, 0], ref_points_world[env_id, i, 1], ref_points_world[env_id, i, 2]), r=None)
+                gymutil.draw_lines(geom, self.gym, self.viewer, self.envs[env_id], pose)
     
     def _process_object_rigid_shape_props(self, props, env_id):
         """ Callback allowing to store/change/randomize the rigid shape properties of each environment.

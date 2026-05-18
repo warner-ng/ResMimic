@@ -75,6 +75,19 @@ Example: `./eval.sh abc123def 5000` runs evaluation for run `abc123def` at check
 
 Optional: uncomment `--record_video` in `eval.sh` to save videos.
 
+HOI evaluation (default `g1_hoi`, e.g. suitcase/kneel configs):
+
+```bash
+source source_dev_setup.sh
+cd legged_gym/legged_gym/scripts
+python play_residual.py --task "g1_hoi" \
+        --proj_name "resmimic_suitcase" --exptid "suitcase" --checkpoint 900 \
+        --num_envs 1 --device "cuda:0" --teacher_exptid None --teacher_checkpoint -1 \
+        --no_wandb --wandb_entity warner0709-shanghai-ai-lab
+```
+
+Note: object motion files like `legged_gym/assets/motions/kneel.npz` contain only `rot` and `trans` arrays for the object pose.
+
 Bike HOI evaluation (checkpoint-based, with video recording):
 
 ```bash
