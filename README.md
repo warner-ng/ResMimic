@@ -41,6 +41,8 @@ Train the residual policy with the provided config. You need to pass your Weight
 
 ```bash
 ./train.sh <wandb_entity>
+
+# 现在运行这个是运行carry chair
 ./train.sh warner0709-shanghai-ai-lab
 ```
 
@@ -105,7 +107,23 @@ python play_residual.py --task "g1_hoi_bike" \
         --wandb_entity warner0709-shanghai-ai-lab \
         --record_video
 ```
+carry box
+```bash
+source source_dev_setup.sh
+cd legged_gym/legged_gym/scripts
+python play_residual.py --task "g1_hoi" \
+  --proj_name "resmimic_chair" \
+  --exptid "chair" \
+  --checkpoint 900 \
+  --num_envs 1 \
+  --device "cuda:0" \
+  --teacher_exptid None \
+  --teacher_checkpoint -1 \
+  --no_wandb \
+  --wandb_entity warner0709-shanghai-ai-lab
 
+
+```
 ---
 
 ## Citation and Contact
