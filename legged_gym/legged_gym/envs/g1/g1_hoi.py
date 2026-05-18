@@ -115,17 +115,25 @@ class G1HOI(G1MimicFuture):
                 self.root_states[env_ids, 10:13] = root_ang_vel[env_ids, :]
 
             self.object_root_states[env_ids, :] =  torch.zeros_like(self.object_root_states[env_ids, :])
-            # Fixed placement: in front of robot (based on robot yaw), facing the robot
-            forward_local = torch.tensor([1.0, 0.0, 0.0], device=self.device)
-            forward_world = quat_rotate(self.root_states[env_ids, 3:7], forward_local.expand(len(env_ids), 3))
-            fixed_offset = forward_world * 1.2
-            fixed_offset[:, 2] = 0.5
-            self.object_root_states[env_ids, :3] = self.env_origins[env_ids] + fixed_offset
+            
+            self.object_root_states[env_ids, :3] = self._ref_object_root_pos[env_ids, :3] + torch.tensor([0.0, 0.0, 0.03], device=self.device)
+            self.object_root_states[env_ids, 3:7] = self._ref_object_root_rot[env_ids, :]
+            self.object_root_states[env_ids, :3] += self.env_origins[env_ids]
 
-            _, _, base_yaw = euler_from_quaternion(self.root_states[env_ids, 3:7])
-            target_yaw = base_yaw + torch.pi
-            fixed_quat = quat_from_euler_xyz(0 * target_yaw, 0 * target_yaw, target_yaw)
-            self.object_root_states[env_ids, 3:7] = fixed_quat
+            object_urdf_file = (self.cfg.env.object_urdf_file or "").lower()
+            is_bike_task = ("bike" in object_urdf_file) or ("bicycle" in object_urdf_file)
+            if is_bike_task:
+                # Fixed placement: in front of robot (based on robot yaw), facing the robot
+                forward_local = torch.tensor([1.0, 0.0, 0.0], device=self.device)
+                forward_world = quat_rotate(self.root_states[env_ids, 3:7], forward_local.expand(len(env_ids), 3))
+                fixed_offset = forward_world * 1.2
+                fixed_offset[:, 2] = 0.5
+                self.object_root_states[env_ids, :3] = self.env_origins[env_ids] + fixed_offset
+
+                _, _, base_yaw = euler_from_quaternion(self.root_states[env_ids, 3:7])
+                target_yaw = base_yaw + torch.pi
+                fixed_quat = quat_from_euler_xyz(0 * target_yaw, 0 * target_yaw, target_yaw)
+                self.object_root_states[env_ids, 3:7] = fixed_quat
 
 
             def quat_rotate_xyzw(q, v):

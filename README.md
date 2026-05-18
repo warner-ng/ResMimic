@@ -44,7 +44,7 @@ Train the residual policy with the provided config. You need to pass your Weight
 
 # 现在运行这个是运行carry chair
 ./train.sh warner0709-shanghai-ai-lab
-```
+```![alt text](image.png)
 
 Example: `./train.sh my_username`
 
@@ -114,7 +114,7 @@ cd legged_gym/legged_gym/scripts
 python play_residual.py --task "g1_hoi" \
   --proj_name "resmimic_chair" \
   --exptid "chair" \
-  --checkpoint 900 \
+  --checkpoint 600 \
   --num_envs 1 \
   --device "cuda:0" \
   --teacher_exptid None \
