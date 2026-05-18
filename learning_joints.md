@@ -114,3 +114,4 @@ rot: (250, 4)
 trans: (250, 3)
 
 
+3. 需要有collision和inertia才能够把urdf放到isaacgym

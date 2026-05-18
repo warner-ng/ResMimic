@@ -1,59 +1,155 @@
 <?xml version="1.0" ?>
-<robot name="bike_top_tube_vscode">
+<robot name="bike_top_tube">
   <link name="frame">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="2.0"/>
+      <inertia ixx="0.05" ixy="0" ixz="0" iyy="0.05" iyz="0" izz="0.05"/>
+    </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://resmimic_assets/bicycle_top_tube/meshes/frame.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/frame.STL" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/frame.STL" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
   </link>
 
   <link name="front_fork_1">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.02" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.02"/>
+    </inertial>
     <visual>
       <origin xyz="0.061665 0.0 -0.286333" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://resmimic_assets/bicycle_top_tube/meshes/front_fork_1.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/front_fork_1.STL" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
+    <collision>
+      <origin xyz="0.061665 0.0 -0.286333" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/front_fork_1.STL" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
   </link>
 
   <link name="front_wheel_1">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.02" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.02"/>
+    </inertial>
     <visual>
       <origin xyz="-0.175163 0.084 0.267533" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://resmimic_assets/bicycle_top_tube/meshes/front_wheel_1.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/front_wheel_1.STL" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
+    <collision>
+      <origin xyz="-0.175163 0.084 0.267533" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/front_wheel_1.STL" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
   </link>
 
   <link name="back_wheel_1">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.02" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.02"/>
+    </inertial>
     <visual>
       <origin xyz="0.84811 0.08 0.267533" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://resmimic_assets/bicycle_top_tube/meshes/back_wheel_1.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/back_wheel_1.STL" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
+    <collision>
+      <origin xyz="0.84811 0.08 0.267533" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/back_wheel_1.STL" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
   </link>
 
-  <joint name="Rev2" type="continuous">
+  <link name="rear_support_left">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.3"/>
+      <inertia ixx="0.002" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.002"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.4 0.02"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.4 0.02"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="rear_support_right">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.3"/>
+      <inertia ixx="0.002" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.002"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.4 0.02"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.4 0.02"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="Rev2" type="fixed">
     <origin xyz="-0.061665 0.0 0.286333" rpy="0 0 0"/>
     <parent link="frame"/>
     <child link="front_fork_1"/>
     <axis xyz="0.34202 0.0 -0.939693"/>
   </joint>
 
-  <joint name="Rev1" type="continuous">
+  <joint name="Rev1" type="fixed">
     <origin xyz="0.236828 -0.084 -0.553866" rpy="0 0 0"/>
     <parent link="front_fork_1"/>
     <child link="front_wheel_1"/>
     <axis xyz="0.0 -1.0 0.0"/>
   </joint>
 
-  <joint name="Rev3" type="continuous">
+  <joint name="Rev3" type="fixed">
     <origin xyz="-0.84811 -0.08 -0.267533" rpy="0 0 0"/>
     <parent link="frame"/>
     <child link="back_wheel_1"/>
     <axis xyz="0.0 1.0 0.0"/>
+  </joint>
+
+  <joint name="RearSupportLeft" type="fixed">
+    <origin xyz="-0.84811 0.08 -0.567533" rpy="0 0 0"/>
+    <parent link="frame"/>
+    <child link="rear_support_left"/>
+  </joint>
+
+  <joint name="RearSupportRight" type="fixed">
+    <origin xyz="-0.84811 -0.08 -0.567533" rpy="0 0 0"/>
+    <parent link="frame"/>
+    <child link="rear_support_right"/>
   </joint>
 </robot>
