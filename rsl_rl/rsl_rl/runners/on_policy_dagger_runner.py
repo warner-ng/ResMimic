@@ -426,7 +426,8 @@ class OnPolicyDaggerRunner:
             # wandb_dict['Train/mean_reward/time', statistics.mean(locs['rewbuffer']), self.tot_time)
             # wandb_dict['Train/mean_episode_length/time', statistics.mean(locs['lenbuffer']), self.tot_time)
 
-        wandb.log(wandb_dict, step=locs['it'])
+        if wandb.run is not None:
+            wandb.log(wandb_dict, step=locs['it'])
 
         str = f" \033[1m Learning iteration {locs['it']}/{self.current_learning_iteration + locs['num_learning_iterations']} \033[0m "
 
@@ -494,7 +495,7 @@ class OnPolicyDaggerRunner:
         torch.save(state_dict, path)
         
         # Save to wandb only if enabled in config
-        if getattr(self.cfg, 'save_to_wandb', True):  # Default to True for backward compatibility
+        if getattr(self.cfg, 'save_to_wandb', True) and wandb.run is not None:  # Default to True for backward compatibility
             wandb.save(path, base_path=os.path.dirname(path))
             print(f"Saved model to {path} as well as to wandb")
         else:

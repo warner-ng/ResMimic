@@ -1,0 +1,29 @@
+<?xml version="1.0" ?>
+<robot name="chairblack_cari4d">
+  <material name="chairblack_cari4d_color">
+    <color rgba="0.8 0.8 0.8 1.0"/>
+  </material>
+
+  <link name="chairblack_cari4d_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="4.0"/>
+      <inertia ixx="0.1" ixy="0" ixz="0" iyy="0.1" iyz="0" izz="0.1"/>
+    </inertial>
+
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="chairblack_cari4d_clean.obj" scale="1 1 1"/>
+      </geometry>
+      <material name="chairblack_cari4d_color"/>
+    </visual>
+
+    <collision name="chairblack_cari4d_collision">
+      <origin rpy="0 0 0" xyz="-0.0009915 -0.0144335 0.0012355"/>
+      <geometry>
+        <box size="0.457009 0.852929 0.586453"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>

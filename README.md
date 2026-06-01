@@ -52,13 +52,16 @@ Viewer mode (interactive window):
 
 ```bash
 source source_dev_setup.sh
-python legged_gym/legged_gym/scripts/train.py --task "g1_hoi_bike" \
-	--proj_name "resmimic_bike" --exptid "bike_top_tube" --device cuda:0 \
-	--teacher_exptid None --num_envs 512 --wandb_entity warner0709-shanghai-ai-lab
-
-python legged_gym/legged_gym/scripts/train.py --task "g1_hoi_bike" \
-        --proj_name "resmimic_bike" --exptid "bike_top_tube" --device cuda:0 \
-        --teacher_exptid None --num_envs 4096 --wandb_entity warner0709-shanghai-ai-lab --headless
+cd /home/warner/_projects/ResMimic
+python legged_gym/legged_gym/scripts/train.py \
+  --task "g1_hoi_bike" \
+  --proj_name "resmimic_bike" \
+  --exptid "bike_top_tube_env1" \
+  --device cuda:0 \
+  --teacher_exptid None \
+  --num_envs 1 \
+  --wandb_entity warner0709-shanghai-ai-lab
+  
 ```
 
 Note: omit `--headless` to keep the viewer on.
@@ -120,7 +123,8 @@ python play_residual.py --task "g1_hoi" \
   --teacher_exptid None \
   --teacher_checkpoint -1 \
   --no_wandb \
-  --wandb_entity warner0709-shanghai-ai-lab
+  --wandb_entity warner0709-shanghai-ai-lab\
+  --record_video
 
 
 ```

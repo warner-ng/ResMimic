@@ -7,11 +7,21 @@ class G1HOICfg(G1MimicStuFutureCfg):
     class env(G1MimicStuFutureCfg.env):
         rand_reset = False
         randomize_start_pos = False
+        # Debug switch: disable all episode termination conditions to inspect trajectories.
+        disable_termination_for_debug = False
+        # Debug-only switch for forcing bike placement in front of robot.
+        # Keep disabled in normal training/visualization to follow motion reference.
+        enable_bike_test_placement = False
         object_asset_root = f'{LEGGED_GYM_ROOT_DIR}/assets'
-        # object_urdf_file = 'suitcase/suitcase.urdf'
-        # object_obj_file = 'suitcase/suitcase.obj'
-        object_urdf_file = 'chair/chair.urdf'
-        object_obj_file = 'chair/chair.obj'
+        object_urdf_file = 'suitcase/suitcase.urdf'
+        object_obj_file = 'suitcase/suitcase.obj'
+        # Constant object orientation calibration in degrees [roll_x, pitch_y, yaw_z].
+        # This offsets object motion quaternions while keeping positions unchanged.
+        object_motion_rot_offset_deg = [0.0, 0.0, 0.0]
+        # Global HOI transform applied at load-time in IsaacGym (not baked into motion files).
+        # Applies to both human root and object root, preserving relative pose.
+        motion_global_rot_offset_deg = [0.0, 0.0, 0.0]  # [roll_x, pitch_y, yaw_z]
+        motion_global_pos_offset = [0.0, 0.0, 0.0]      # [x, y, z] meters
 
         num_actors = 2
         nonblind = True
@@ -22,15 +32,14 @@ class G1HOICfg(G1MimicStuFutureCfg):
         num_privileged_obs = n_priv_obs_single  
 
     class motion(G1MimicStuFutureCfg.motion):
-        # Carry-a-chair motion and object trajectory.
-        motion_file = f"{LEGGED_GYM_ROOT_DIR}/assets/motions/chair.pkl"
-        object_motion_file = f"{LEGGED_GYM_ROOT_DIR}/assets/motions/chair.npz"
-        # motion_file = f"{LEGGED_GYM_ROOT_DIR}/assets/motions/kneel.pkl"
-        # object_motion_file = f"{LEGGED_GYM_ROOT_DIR}/assets/motions/kneel.npz"
-        # motion_file = f"{LEGGED_GYM_ROOT_DIR}/assets/motions/squat.pkl"
-        # object_motion_file = f"{LEGGED_GYM_ROOT_DIR}/assets/motions/squat.npz"
+        motion_file = f"{LEGGED_GYM_ROOT_DIR}/assets/motions/kneel.pkl"
+        object_motion_file = f"{LEGGED_GYM_ROOT_DIR}/assets/motions/kneel.npz"
         # motion_file = f"{LEGGED_GYM_ROOT_DIR}/assets/motions/carry.pkl"
         # object_motion_file = f"{LEGGED_GYM_ROOT_DIR}/assets/motions/carry.npz"
+        # motion_file = f"{LEGGED_GYM_ROOT_DIR}/assets/motions/squat.pkl"
+        # object_motion_file = f"{LEGGED_GYM_ROOT_DIR}/assets/motions/squat.npz"
+        # motion_file = f"{LEGGED_GYM_ROOT_DIR}/assets/motions/chair.pkl"
+        # object_motion_file = f"{LEGGED_GYM_ROOT_DIR}/assets/motions/chair.npz"
         
         # Ensure motion curriculum is enabled for difficulty adaptation
         motion_curriculum = False

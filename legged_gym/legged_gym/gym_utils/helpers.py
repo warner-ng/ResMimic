@@ -172,6 +172,10 @@ def get_load_path(root, load_run=-1, checkpoint=-1, model_name_include="model"):
 def update_cfg_from_args(env_cfg, cfg_train, args):
     # seed
     if env_cfg is not None:
+        if getattr(args, "enable_termination", False):
+            env_cfg.env.disable_termination_for_debug = False
+        elif getattr(args, "disable_termination_for_debug", False):
+            env_cfg.env.disable_termination_for_debug = True
         if args.teleop_mode:
             env_cfg.env.teleop_mode = True
         # num envs
@@ -280,6 +284,8 @@ def get_args():
         {"name": "--rows", "type": int, "help": "num_rows."},
         {"name": "--cols", "type": int, "help": "num_cols"},
         {"name": "--debug", "action": "store_true", "default": False, "help": "Disable wandb logging"},
+        {"name": "--disable_termination_for_debug", "action": "store_true", "default": False, "help": "Disable environment termination checks for debugging trajectories"},
+        {"name": "--enable_termination", "action": "store_true", "default": False, "help": "Force-enable normal termination checks (overrides debug disable flag)"},
         {"name": "--proj_name", "type": str,  "default": "h1", "help": "run folder name."},
         
         {"name": "--exptid", "type": str, "help": "exptid"},

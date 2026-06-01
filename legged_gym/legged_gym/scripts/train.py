@@ -64,8 +64,12 @@ def train(args):
     
     try:
         wandb.init(entity=args.wandb_entity, project="resmimic", name=args.exptid, mode=mode, dir="../../logs")
-    except:
-        pass
+    except Exception as e:
+        print(f"[train] wandb.init failed ({e}). Falling back to disabled mode.")
+        try:
+            wandb.init(entity=args.wandb_entity, project="resmimic", name=args.exptid, mode="disabled", dir="../../logs")
+        except Exception as e2:
+            print(f"[train] wandb disabled init also failed ({e2}). Training will continue without wandb logging.")
     
     env, _ = task_registry.make_env(name=args.task, args=args)
     print(f"Using motion file: {env.cfg.motion.motion_file}")

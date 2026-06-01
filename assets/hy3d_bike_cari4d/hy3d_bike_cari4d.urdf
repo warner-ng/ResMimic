@@ -1,0 +1,29 @@
+<?xml version="1.0" ?>
+<robot name="hy3d_bike_cari4d">
+  <material name="hy3d_bike_cari4d_color">
+    <color rgba="0.8 0.8 0.8 1.0"/>
+  </material>
+
+  <link name="hy3d_bike_cari4d_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="5.0"/>
+      <inertia ixx="0.1" ixy="0" ixz="0" iyy="0.1" iyz="0" izz="0.1"/>
+    </inertial>
+
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="Date03_Sub01_bike_wild001_000_align_centered_x20.obj" scale="1 1 1"/>
+      </geometry>
+      <material name="hy3d_bike_cari4d_color"/>
+    </visual>
+
+    <collision name="hy3d_bike_cari4d_collision">
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="Date03_Sub01_bike_wild001_000_align_centered_x20.obj" scale="1 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>

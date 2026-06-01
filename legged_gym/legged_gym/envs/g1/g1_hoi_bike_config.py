@@ -12,8 +12,8 @@ class G1HOIBikeCfg(G1HOICfg):
         object_obj_file = "bicycle_top_tube/meshes/bike_top_tube_merged.obj"
 
     class motion(G1HOICfg.motion):
-        motion_file = f"{REPO_ROOT_DIR}/assets/motions/carrying_bike_rack_g1_fullbody.pkl"
-        object_motion_file = f"{REPO_ROOT_DIR}/assets/motions/carrying_bike_rack_g1_object.npz"
+        motion_file = f"{REPO_ROOT_DIR}/assets/motions/20260522_233018_eaf586b7_human.pkl"
+        object_motion_file = f"{REPO_ROOT_DIR}/assets/motions/20260522_233018_eaf586b7_object.npz"
 
     class rewards(G1HOICfg.rewards):
         termination_when_object_far = False
@@ -28,8 +28,8 @@ class G1HOIBikeCfgDAgger(G1HOICfgDAgger):
         object_obj_file = "bicycle_top_tube/meshes/bike_top_tube_merged.obj"
 
     class motion(G1HOICfgDAgger.motion):
-        motion_file = f"{REPO_ROOT_DIR}/assets/motions/carrying_bike_rack_g1_fullbody.pkl"
-        object_motion_file = f"{REPO_ROOT_DIR}/assets/motions/carrying_bike_rack_g1_object.npz"
+        motion_file = f"{REPO_ROOT_DIR}/assets/motions/20260522_233018_eaf586b7_human.pkl"
+        object_motion_file = f"{REPO_ROOT_DIR}/assets/motions/20260522_233018_eaf586b7_object.npz"
 
     class rewards(G1HOICfgDAgger.rewards):
         termination_when_object_far = False

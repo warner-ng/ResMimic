@@ -3,7 +3,7 @@ import torch
 from pose.utils.torch_utils import quat_diff, quat_to_exp_map, slerp, euler_from_quaternion
 from tqdm import tqdm
 from rich import print
-from isaacgym.torch_utils import quat_rotate_inverse
+from isaacgym.torch_utils import quat_rotate_inverse, quat_from_euler_xyz, quat_mul
 import sys
 from types import ModuleType
 import numpy as np
@@ -39,12 +39,25 @@ class MotionLibHOI(MotionLib):
                  motion_decompose=False, 
                  motion_smooth=True, 
                  motion_height_adjust=False,
-                 sample_ratio=1.0 # only sample a portion of the motion
+                 sample_ratio=1.0, # only sample a portion of the motion
+                 object_rot_offset_deg=(0.0, 0.0, 0.0)
                  ):
         super().__init__(motion_file, device, motion_decompose, motion_smooth, motion_height_adjust, sample_ratio)
         object_data = np.load(object_motion_file)
         self._object_root_pos = torch.tensor(object_data['trans'], dtype=torch.float32, device=device)
         self._object_root_rot = torch.tensor(object_data['rot'], dtype=torch.float32, device=device)
+
+        # Optional constant rotation offset (degrees) for object orientation calibration.
+        # Convention: [roll_x, pitch_y, yaw_z], quaternion order xyzw.
+        offset = np.asarray(object_rot_offset_deg, dtype=np.float32).reshape(-1)
+        if offset.shape[0] != 3:
+            raise ValueError(f"object_rot_offset_deg must have 3 values, got {object_rot_offset_deg}")
+        if np.any(np.abs(offset) > 1e-6):
+            offset_rad = torch.tensor(offset * np.pi / 180.0, dtype=torch.float32, device=device).unsqueeze(0)
+            offset_quat = quat_from_euler_xyz(offset_rad[:, 0], offset_rad[:, 1], offset_rad[:, 2])
+            offset_quat = offset_quat.expand(self._object_root_rot.shape[0], -1)
+            # Apply as a local-frame correction: q_corrected = q_motion * q_offset
+            self._object_root_rot = quat_mul(self._object_root_rot, offset_quat)
 
 
     def calc_hoi_motion_frame(self, motion_ids, motion_times):

@@ -30,8 +30,28 @@ class G1HOI(G1MimicFuture):
                                      object_motion_file=self.cfg.motion.object_motion_file, device=self.device,
                                     sample_ratio=self.cfg.motion.sample_ratio,
                                     motion_decompose=self.cfg.motion.motion_decompose,
-                                    motion_smooth=self.cfg.motion.motion_smooth)
+                                    motion_smooth=self.cfg.motion.motion_smooth,
+                                    object_rot_offset_deg=getattr(self.cfg.env, "object_motion_rot_offset_deg", [0.0, 0.0, 0.0]))
         return
+
+    def _apply_global_hoi_load_offset(self, root_pos, root_rot, object_root_pos, object_root_rot):
+        rot_deg = getattr(self.cfg.env, "motion_global_rot_offset_deg", [0.0, 0.0, 0.0])
+        pos_off = getattr(self.cfg.env, "motion_global_pos_offset", [0.0, 0.0, 0.0])
+
+        r = torch.tensor(rot_deg, device=self.device, dtype=torch.float32).view(1, 3) * (torch.pi / 180.0)
+        t = torch.tensor(pos_off, device=self.device, dtype=torch.float32).view(1, 3)
+
+        if torch.all(torch.abs(r) < 1e-8) and torch.all(torch.abs(t) < 1e-8):
+            return root_pos, root_rot, object_root_pos, object_root_rot
+
+        q_off = quat_from_euler_xyz(r[:, 0], r[:, 1], r[:, 2]).expand(root_pos.shape[0], -1)
+
+        root_pos = quat_rotate(q_off, root_pos) + t
+        object_root_pos = quat_rotate(q_off, object_root_pos) + t
+        root_rot = quat_mul(q_off, root_rot)
+        object_root_rot = quat_mul(q_off, object_root_rot)
+
+        return root_pos, root_rot, object_root_pos, object_root_rot
 
 
     def _reset_ref_motion(self, env_ids, motion_ids=None):
@@ -48,6 +68,9 @@ class G1HOI(G1MimicFuture):
         self._motion_time_offsets[env_ids] = motion_times
         
         root_pos, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, body_pos, root_pos_delta_local, root_rot_delta_local, object_root_pos, object_root_rot = self._motion_lib.calc_hoi_motion_frame(motion_ids, motion_times)
+        root_pos, root_rot, object_root_pos, object_root_rot = self._apply_global_hoi_load_offset(
+            root_pos, root_rot, object_root_pos, object_root_rot
+        )
         root_pos[:, 2] += self.cfg.motion.height_offset
         self._ref_root_pos[env_ids] = root_pos
         self._ref_root_rot[env_ids] = root_rot
@@ -67,6 +90,9 @@ class G1HOI(G1MimicFuture):
         motion_ids = self._motion_ids
         motion_times = self._get_motion_times()
         root_pos, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, body_pos, root_pos_delta_local, root_rot_delta_local, object_root_pos, object_root_rot = self._motion_lib.calc_hoi_motion_frame(motion_ids, motion_times)
+        root_pos, root_rot, object_root_pos, object_root_rot = self._apply_global_hoi_load_offset(
+            root_pos, root_rot, object_root_pos, object_root_rot
+        )
         root_pos[:, 2] += self.cfg.motion.height_offset
         root_pos[:, :2] += self.episode_init_origin[:, :2]
         
@@ -120,9 +146,11 @@ class G1HOI(G1MimicFuture):
             self.object_root_states[env_ids, 3:7] = self._ref_object_root_rot[env_ids, :]
             self.object_root_states[env_ids, :3] += self.env_origins[env_ids]
 
+            # Optional bike test placement override (default: disabled).
+            # Keep this path for quick debugging but do not apply in normal runs.
             object_urdf_file = (self.cfg.env.object_urdf_file or "").lower()
             is_bike_task = ("bike" in object_urdf_file) or ("bicycle" in object_urdf_file)
-            if is_bike_task:
+            if is_bike_task and getattr(self.cfg.env, "enable_bike_test_placement", False):
                 # Fixed placement: in front of robot (based on robot yaw), facing the robot
                 forward_local = torch.tensor([1.0, 0.0, 0.0], device=self.device)
                 forward_world = quat_rotate(self.root_states[env_ids, 3:7], forward_local.expand(len(env_ids), 3))
@@ -696,6 +724,13 @@ class G1HOI(G1MimicFuture):
 
 
     def check_termination(self):
+        if getattr(self.cfg.env, "disable_termination_for_debug", False):
+            if self.cfg.rewards.termination_when_object_far:
+                self._update_object_point_cloud_dist()
+            self.reset_buf[:] = 0
+            self.time_out_buf[:] = 0
+            return
+
         contact_force_termination = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1., dim=1)
         self.reset_buf = contact_force_termination.clone()
         
@@ -712,16 +747,7 @@ class G1HOI(G1MimicFuture):
 
         # check object far termination
         if self.cfg.rewards.termination_when_object_far:
-            obj_rot = self.object_root_states[:, 3:7]
-            object_points = self.object_points.unsqueeze(0).repeat(self.num_envs, 1, 1)
-            object_points_extend = object_points.view(-1, 3)
-
-            obj_rot_extend = obj_rot.unsqueeze(1).repeat(1, object_points.shape[1], 1).view(-1, 4)
-            self.obj_points = quat_rotate(obj_rot_extend, object_points_extend).view(obj_rot.shape[0], object_points.shape[1], 3) + self.object_root_states[:, :3].unsqueeze(1)
-            ref_obj_rot_extend = self._ref_object_root_rot.unsqueeze(1).repeat(1, object_points.shape[1], 1).view(-1, 4)
-            self.ref_obj_points = quat_rotate(ref_obj_rot_extend, object_points_extend).view(obj_rot.shape[0], object_points.shape[1], 3) + self._ref_object_root_pos.unsqueeze(1)
-            
-            self.object_point_cloud_dist = (self.obj_points - self.ref_obj_points).norm(dim=-1).mean(dim=-1)
+            self._update_object_point_cloud_dist()
             reset_buf_object_far = self.object_point_cloud_dist > self.cfg.rewards.termination_object_far_threshold
             self.reset_buf |= reset_buf_object_far
         
@@ -800,8 +826,23 @@ class G1HOI(G1MimicFuture):
                 print(f"Env {id} reset due to: {reset_reason}")
     
     
+    def _update_object_point_cloud_dist(self):
+        obj_rot = self.object_root_states[:, 3:7]
+        object_points = self.object_points.unsqueeze(0).repeat(self.num_envs, 1, 1)
+        object_points_extend = object_points.view(-1, 3)
+
+        obj_rot_extend = obj_rot.unsqueeze(1).repeat(1, object_points.shape[1], 1).view(-1, 4)
+        self.obj_points = quat_rotate(obj_rot_extend, object_points_extend).view(obj_rot.shape[0], object_points.shape[1], 3) + self.object_root_states[:, :3].unsqueeze(1)
+
+        ref_obj_rot_extend = self._ref_object_root_rot.unsqueeze(1).repeat(1, object_points.shape[1], 1).view(-1, 4)
+        self.ref_obj_points = quat_rotate(ref_obj_rot_extend, object_points_extend).view(obj_rot.shape[0], object_points.shape[1], 3) + self._ref_object_root_pos.unsqueeze(1)
+
+        self.object_point_cloud_dist = (self.obj_points - self.ref_obj_points).norm(dim=-1).mean(dim=-1)
+
     def _reward_tracking_object_point_cloud(self):
         object_point_cloud_scale = 10.0
+        if not hasattr(self, "object_point_cloud_dist"):
+            self._update_object_point_cloud_dist()
         return torch.exp(-object_point_cloud_scale * self.object_point_cloud_dist)
 
     def _get_object_points_world(self, root_pos, root_rot, max_points=128):

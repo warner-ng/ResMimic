@@ -33,6 +33,8 @@
 from .g1.g1_hoi import G1HOI
 from .g1.g1_hoi_config import G1HOICfg, G1HOICfgDAgger
 from .g1.g1_hoi_bike_config import G1HOIBikeCfg, G1HOIBikeCfgDAgger
+from .g1.g1_hoi_bike_cari4d_config import G1HOIBikeCari4DCfg, G1HOIBikeCari4DCfgDAgger
+from .g1.g1_hoi_cari4d_chair_config import G1HOICari4DChairCfg, G1HOICari4DChairCfgDAgger
 
 from legged_gym.gym_utils.task_registry import task_registry
 
@@ -42,3 +44,5 @@ from legged_gym.gym_utils.task_registry import task_registry
 # DeepMimic (for HOI)
 task_registry.register("g1_hoi", G1HOI, G1HOICfg(), G1HOICfgDAgger())
 task_registry.register("g1_hoi_bike", G1HOI, G1HOIBikeCfg(), G1HOIBikeCfgDAgger())
+task_registry.register("g1_hoi_bike_cari4d", G1HOI, G1HOIBikeCari4DCfg(), G1HOIBikeCari4DCfgDAgger())
+task_registry.register("g1_hoi_cari4d_chair", G1HOI, G1HOICari4DChairCfg(), G1HOICari4DChairCfgDAgger())
