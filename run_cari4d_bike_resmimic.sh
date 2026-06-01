@@ -31,10 +31,24 @@ GMR_ROOT="${GMR_ROOT:-/home/warner/_projects/GMR}"
 CARI4D_ROOT="${CARI4D_ROOT:-/home/warner/_projects/CARI4D}"  # <<< 按需改：CARI4D 仓库根目录
 
 # 你这次提供的 Step7 输出
-CARI4D_PTH="${CARI4D_PTH:-/home/warner/_projects/CARI4D/output/opt/cari4d-release+step031397_demo_oomfix-hy3d3-optv2_oomfix/Date03_Sub01_bike_on_may_29_21_17.pth}"  # <<< 改这里
-TAG="${TAG:-Date03_Sub01_bike_on_may_29_21_17}"  # <<< 改这里
+CARI4D_PTH="${CARI4D_PTH:-/home/warner/_projects/CARI4D/output/opt/cari4d-release+step031397_demo_20260531-202214-hy3d3-optv2_20260531-202214/Date03_Sub01_bike_May_31_19_34.pth}"  # <<< 改这里
+TAG="${TAG:-Date03_Sub01_bike_May_31_19_34}"  # <<< 改这里
 SPLIT="${SPLIT:-in}"  # <<< 按需改：in | pr | gt
 PAIR_SUFFIX="${PAIR_SUFFIX:-bikez}"  # <<< 改这里
+# 物体位移偏移（在数据生成阶段加到 object trans 上）
+OBJECT_OFFSET_X="${OBJECT_OFFSET_X:--0}"  # <<< 改这里
+OBJECT_OFFSET_Y="${OBJECT_OFFSET_Y:--0.2}"  # <<< 改这里
+OBJECT_OFFSET_Z="${OBJECT_OFFSET_Z:--0.8}"  # <<< 改这里
+OBJECT_ROT_ROLL_DEG="${OBJECT_ROT_ROLL_DEG:--10.0}"  # <<< 改这里：写入object motion的roll偏移
+OBJECT_ROT_PITCH_DEG="${OBJECT_ROT_PITCH_DEG:-0.0}"  # <<< 改这里：写入object motion的pitch偏移
+OBJECT_ROT_YAW_DEG="${OBJECT_ROT_YAW_DEG:-0.0}"  # <<< 改这里：写入object motion的yaw偏移
+OBJECT_VIEWER_SCALE="${OBJECT_VIEWER_SCALE:-1.7}"  # <<< 改这里：viser显示时的物体缩放（仅可视化）
+OBJECT_MESH_MIRROR_AXIS="${OBJECT_MESH_MIRROR_AXIS:-y}"  # <<< 改这里：none|x|y|z，仅viser里翻面
+OBJECT_RPY_ROLL_DEG="${OBJECT_RPY_ROLL_DEG:-0.0}"  # <<< 改这里：viser里额外roll角度
+OBJECT_RPY_PITCH_DEG="${OBJECT_RPY_PITCH_DEG:-0.0}"  # <<< 改这里：viser里额外pitch角度
+OBJECT_RPY_YAW_DEG="${OBJECT_RPY_YAW_DEG:-0.0}"  # <<< 改这里：viser里额外yaw角度
+OBJECT_SCALE_DEBUG_CUBE="${OBJECT_SCALE_DEBUG_CUBE:-0}"  # <<< 改这里：1=显示红色debug立方体
+OBJECT_SCALE_MOTION_FALLBACK="${OBJECT_SCALE_MOTION_FALLBACK:-0}"  # <<< 改这里：1=启用轨迹缩放兜底
 
 # 任务与训练
 TASK="${TASK:-g1_hoi_bike_cari4d}"  # bike 任务名
@@ -88,14 +102,23 @@ source "$RESMIMIC_ROOT/source_dev_setup.sh"
 cd "$RESMIMIC_ROOT"
 
 echo "[1/5] 从 CARI4D pth 生成 smplx/human/object..."
-python "$RESMIMIC_ROOT/scripts/prepare_cari4d_hoi_motion.py" \
-  --cari4d_pth "$CARI4D_PTH" \
-  --split "$SPLIT" \
-  --tag "$TAG" \
-  --resmimic_root "$RESMIMIC_ROOT" \
-  --gmr_root "$GMR_ROOT" \
-  --cari4d_root "$CARI4D_ROOT" \
+PREP_ARGS=(
+  --cari4d_pth "$CARI4D_PTH"
+  --split "$SPLIT"
+  --tag "$TAG"
+  --resmimic_root "$RESMIMIC_ROOT"
+  --gmr_root "$GMR_ROOT"
+  --cari4d_root "$CARI4D_ROOT"
   --motion_dir "$MOTION_DIR"
+  --object_offset_x "$OBJECT_OFFSET_X"
+  --object_offset_y "$OBJECT_OFFSET_Y"
+  --object_offset_z "$OBJECT_OFFSET_Z"
+  --object_rot_roll_deg "$OBJECT_ROT_ROLL_DEG"
+  --object_rot_pitch_deg "$OBJECT_ROT_PITCH_DEG"
+  --object_rot_yaw_deg "$OBJECT_ROT_YAW_DEG"
+)
+
+python "$RESMIMIC_ROOT/scripts/prepare_cari4d_hoi_motion.py" "${PREP_ARGS[@]}"
 
 ########################################
 # 2) 配对文件检查
@@ -157,16 +180,15 @@ for line in s.splitlines():
 PY
 
 ########################################
-# 4) 启动训练
+# 4) 启动非物理可视化（便于调偏移）
 ########################################
 
-echo "[4/5] 启动训练..."
-python "$RESMIMIC_ROOT/legged_gym/legged_gym/scripts/train.py" \
-  --task "$TASK" \
-  --proj_name "$PROJ_NAME" \
-  --exptid "$EXPTID" \
-  --device "$DEVICE" \
-  --teacher_exptid None \
-  --num_envs "$NUM_ENVS" \
-  --no_wandb \
-  --wandb_entity "$WAND_ENTITY"
+echo "[4/5] 启动 nonphysics viewer（训练阶段保持关闭）..."
+OBJECT_VIEWER_SCALE="$OBJECT_VIEWER_SCALE" \
+OBJECT_MESH_MIRROR_AXIS="$OBJECT_MESH_MIRROR_AXIS" \
+OBJECT_RPY_ROLL_DEG="$OBJECT_RPY_ROLL_DEG" \
+OBJECT_RPY_PITCH_DEG="$OBJECT_RPY_PITCH_DEG" \
+OBJECT_RPY_YAW_DEG="$OBJECT_RPY_YAW_DEG" \
+OBJECT_SCALE_DEBUG_CUBE="$OBJECT_SCALE_DEBUG_CUBE" \
+OBJECT_SCALE_MOTION_FALLBACK="$OBJECT_SCALE_MOTION_FALLBACK" \
+bash "$RESMIMIC_ROOT/run_nonphysics_chair_viewer.sh"

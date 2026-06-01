@@ -14,8 +14,8 @@ class G1HOIBikeCari4DCfg(G1HOICfg):
         motion_global_rot_offset_deg = [0.000000, 180.000000, 90.000000]
         motion_global_pos_offset = [0.000000, 0.000000, 0.500000]
     class motion(G1HOICfg.motion):
-        motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_on_may_29_21_17_human_upright_bikez.pkl"
-        object_motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_on_may_29_21_17_object_upright_bikez.npz"
+        motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_human_upright_bikez.pkl"
+        object_motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_object_upright_bikez.npz"
     class rewards(G1HOICfg.rewards):
         termination_when_object_far = False
         class scales(G1HOICfg.rewards.scales):
@@ -31,8 +31,8 @@ class G1HOIBikeCari4DCfgDAgger(G1HOICfgDAgger):
         motion_global_rot_offset_deg = [0.000000, 180.000000, 90.000000]
         motion_global_pos_offset = [0.000000, 0.000000, 1.000000]
     class motion(G1HOICfgDAgger.motion):
-        motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_on_may_29_21_17_human_upright_bikez.pkl"
-        object_motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_on_may_29_21_17_object_upright_bikez.npz"
+        motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_human_upright_bikez.pkl"
+        object_motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_object_upright_bikez.npz"
     class rewards(G1HOICfgDAgger.rewards):
         termination_when_object_far = False
         class scales(G1HOICfgDAgger.rewards.scales):

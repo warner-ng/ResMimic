@@ -14,12 +14,15 @@ from __future__ import annotations
 
 import argparse
 import pickle
+import tempfile
 import threading
 import time
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import List, Tuple
 
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 try:
     import viser
@@ -39,6 +42,17 @@ def xyzw_to_wxyz(q_xyzw: np.ndarray) -> np.ndarray:
 def wxyz_to_xyzw(q_wxyz: np.ndarray) -> np.ndarray:
     q_wxyz = np.asarray(q_wxyz, dtype=np.float64)
     return np.array([q_wxyz[1], q_wxyz[2], q_wxyz[3], q_wxyz[0]], dtype=np.float64)
+
+
+def axis_angle_to_wxyz(axis: str, degrees: float) -> np.ndarray:
+    axis_vec = {"x": [1.0, 0.0, 0.0], "y": [0.0, 1.0, 0.0], "z": [0.0, 0.0, 1.0]}[axis]
+    q_xyzw = R.from_rotvec(np.deg2rad(degrees) * np.asarray(axis_vec, dtype=np.float64)).as_quat()
+    return xyzw_to_wxyz(q_xyzw)
+
+
+def rpy_deg_to_wxyz(roll_deg: float, pitch_deg: float, yaw_deg: float) -> np.ndarray:
+    q_xyzw = R.from_euler("xyz", [roll_deg, pitch_deg, yaw_deg], degrees=True).as_quat()
+    return xyzw_to_wxyz(q_xyzw)
 
 
 def _build_urdf(server: viser.ViserServer, urdf_path: str, root_node_name: str):
@@ -65,6 +79,36 @@ def _build_urdf(server: viser.ViserServer, urdf_path: str, root_node_name: str):
                         return ViserUrdf(server, urdf, root_node_name)
                     except TypeError:
                         return ViserUrdf(server, urdf)
+
+
+def build_scaled_urdf_copy(urdf_path: str, scale: float) -> str:
+    src = Path(urdf_path).resolve()
+    src_dir = src.parent
+    tree = ET.parse(src)
+    root = tree.getroot()
+
+    for mesh in root.findall(".//mesh"):
+        filename = mesh.get("filename")
+        if filename:
+            p = Path(filename)
+            if not p.is_absolute():
+                mesh.set("filename", str((src_dir / p).resolve()))
+
+        s = mesh.get("scale")
+        if s:
+            vals = [float(x) for x in s.split()]
+            if len(vals) == 1:
+                vals = [vals[0], vals[0], vals[0]]
+            elif len(vals) == 2:
+                vals = [vals[0], vals[1], vals[1]]
+        else:
+            vals = [1.0, 1.0, 1.0]
+        vals = [v * float(scale) for v in vals[:3]]
+        mesh.set("scale", f"{vals[0]:.8g} {vals[1]:.8g} {vals[2]:.8g}")
+
+    tf = tempfile.NamedTemporaryFile(prefix="object_scaled_", suffix=".urdf", delete=False)
+    tree.write(tf.name, encoding="utf-8", xml_declaration=True)
+    return tf.name
 
 
 def load_human_motion(path: str):
@@ -316,13 +360,42 @@ def main():
         default="/home/warner/_projects/ResMimic/legged_gym/assets/chairblack_cari4d/chairblack_cari4d.urdf",
         help="Optional object URDF path (if missing, only object frame is shown)",
     )
+    parser.add_argument(
+        "--object-scale",
+        type=float,
+        default=1.0,
+        help="Viewer-only uniform object scale (does not change motion/training data).",
+    )
+    parser.add_argument(
+        "--object-motion-scale-fallback",
+        action="store_true",
+        help="Fallback: scale object translation trajectory around first frame for visible size effect.",
+    )
+    parser.add_argument(
+        "--object-mesh-mirror-axis",
+        type=str,
+        default="none",
+        choices=["none", "x", "y", "z"],
+        help="Viewer-only object mesh mirror axis. Keeps object motion unchanged.",
+    )
+    parser.add_argument("--object-rpy-roll-deg", type=float, default=0.0, help="Viewer-only object visual roll offset (deg).")
+    parser.add_argument("--object-rpy-pitch-deg", type=float, default=0.0, help="Viewer-only object visual pitch offset (deg).")
+    parser.add_argument("--object-rpy-yaw-deg", type=float, default=0.0, help="Viewer-only object visual yaw offset (deg).")
     parser.add_argument("--host", default="0.0.0.0", help="Viser host")
     parser.add_argument("--port", type=int, default=8080, help="Viser port")
     parser.add_argument("--fps", type=int, default=0, help="Override playback FPS (0 means use file fps)")
+    parser.add_argument(
+        "--debug-object-scale-cube",
+        action="store_true",
+        help="Add a tiny cube under object_visual to verify parent scale is applied.",
+    )
     args = parser.parse_args()
 
     fps_file, root_pos, root_rot_xyzw, dof_pos = load_human_motion(args.human)
     obj_pos, obj_rot_xyzw = load_object_motion(args.object)
+    if args.object_motion_scale_fallback and abs(float(args.object_scale) - 1.0) > 1e-8:
+        c = obj_pos[0].copy()
+        obj_pos = (obj_pos - c[None, :]) * float(args.object_scale) + c[None, :]
 
     n = int(min(len(root_pos), len(obj_pos), len(dof_pos), len(root_rot_xyzw), len(obj_rot_xyzw)))
     if n <= 0:
@@ -340,10 +413,28 @@ def main():
     robot = _build_urdf(server, args.robot_urdf, root_node_name="/world/robot_base/robot")
 
     object_base = server.scene.add_frame("/world/object_base")
+    object_visual = server.scene.add_frame("/world/object_base/object_visual")
     object_urdf = None
     object_urdf_path = Path(args.object_urdf)
     if object_urdf_path.exists():
-        object_urdf = _build_urdf(server, str(object_urdf_path), root_node_name="/world/object_base/object")
+        object_urdf_load = str(object_urdf_path)
+        if abs(float(args.object_scale) - 1.0) > 1e-8:
+            object_urdf_load = build_scaled_urdf_copy(str(object_urdf_path), float(args.object_scale))
+        object_urdf = _build_urdf(server, object_urdf_load, root_node_name="/world/object_base/object_visual/object")
+        q_vis = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+        if args.object_mesh_mirror_axis != "none":
+            q_vis = axis_angle_to_wxyz(args.object_mesh_mirror_axis, 180.0)
+        q_rpy = rpy_deg_to_wxyz(args.object_rpy_roll_deg, args.object_rpy_pitch_deg, args.object_rpy_yaw_deg)
+        q_vis_xyzw = wxyz_to_xyzw(q_vis)
+        q_rpy_xyzw = wxyz_to_xyzw(q_rpy)
+        q_combined_xyzw = (R.from_quat(q_vis_xyzw) * R.from_quat(q_rpy_xyzw)).as_quat()
+        object_visual.wxyz = xyzw_to_wxyz(q_combined_xyzw)
+        if args.debug_object_scale_cube:
+            server.scene.add_box(
+                "/world/object_base/object_visual/debug_scale_cube",
+                dimensions=(0.1, 0.1, 0.1),
+                color=(255, 80, 80),
+            )
     else:
         print(f"[WARN] object urdf not found, showing only object frame: {object_urdf_path}")
 
@@ -364,6 +455,13 @@ def main():
 
     print(f"[READY] Non-physics viewer running at http://{args.host}:{args.port}")
     print(f"[INFO] frames={n}, fps={fps}, dof={dof_pos.shape[1]}")
+    print(f"[INFO] object_scale(viewer-only)={float(args.object_scale):.4f}")
+    print(f"[INFO] object_mesh_mirror_axis(viewer-only)={args.object_mesh_mirror_axis}")
+    print(
+        f"[INFO] object_rpy_deg(viewer-only)=({args.object_rpy_roll_deg:.3f}, "
+        f"{args.object_rpy_pitch_deg:.3f}, {args.object_rpy_yaw_deg:.3f})"
+    )
+    print("[INFO] object_scale mode=urdf_mesh_scale")
 
     try:
         while True:

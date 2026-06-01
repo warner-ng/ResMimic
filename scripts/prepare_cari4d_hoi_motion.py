@@ -5,6 +5,7 @@ import os.path as osp
 import pickle
 import re
 import sys
+import shutil
 
 import numpy as np
 import torch
@@ -74,6 +75,39 @@ def parse_args():
         default="",
         help="Output motion directory. If empty, auto-pick <resmimic_root>/assets/motions when present, else <resmimic_root>/legged_gym/assets/motions",
     )
+    parser.add_argument(
+        "--pair_suffix",
+        type=str,
+        default="",
+        help="If set, also emit *_human_upright_<pair_suffix>.pkl and *_object_upright_<pair_suffix>.npz",
+    )
+    parser.add_argument(
+        "--auto_pair_suffixes",
+        type=str,
+        default="bikez,chairz,suitcasez",
+        help="Comma-separated fallback suffixes for upright pair outputs when --pair_suffix is empty",
+    )
+    parser.add_argument(
+        "--object_offset_x",
+        type=float,
+        default=0.0,
+        help="Object translation offset on X axis (meters), applied during object npz export",
+    )
+    parser.add_argument(
+        "--object_offset_y",
+        type=float,
+        default=0.0,
+        help="Object translation offset on Y axis (meters), applied during object npz export",
+    )
+    parser.add_argument(
+        "--object_offset_z",
+        type=float,
+        default=0.0,
+        help="Object translation offset on Z axis (meters), applied during object npz export",
+    )
+    parser.add_argument("--object_rot_roll_deg", type=float, default=0.0, help="Object rotation offset roll in degrees.")
+    parser.add_argument("--object_rot_pitch_deg", type=float, default=0.0, help="Object rotation offset pitch in degrees.")
+    parser.add_argument("--object_rot_yaw_deg", type=float, default=0.0, help="Object rotation offset yaw in degrees.")
     return parser.parse_args()
 
 
@@ -125,6 +159,27 @@ def infer_cari4d_root(cari4d_pth: str):
         cur = parent
 
 
+def _collect_pair_suffixes(pair_suffix: str, auto_pair_suffixes: str):
+    suffixes = []
+    if pair_suffix and pair_suffix.strip():
+        suffixes.append(pair_suffix.strip())
+
+    if auto_pair_suffixes:
+        for s in auto_pair_suffixes.split(","):
+            s = s.strip()
+            if s:
+                suffixes.append(s)
+
+    # de-duplicate while preserving order
+    uniq = []
+    seen = set()
+    for s in suffixes:
+        if s not in seen:
+            uniq.append(s)
+            seen.add(s)
+    return uniq
+
+
 def main():
     args = parse_args()
 
@@ -169,6 +224,7 @@ def main():
     # GMR's smplx loader only needs root_orient(3), pose_body(63), trans(3), betas, mocap_frame_rate, gender.
     root_orient = smpl_pose[:, :3].astype(np.float32)
     pose_body = smpl_pose[:, 3:66].astype(np.float32)
+    smpl_trans = smpl_t.astype(np.float32)
 
     # Use shared shape (10 betas) to match common SMPL-X body model shape channels.
     betas_10 = np.mean(betas, axis=0).astype(np.float32)
@@ -181,7 +237,7 @@ def main():
         betas=betas_shape,
         expression=np.zeros((root_orient.shape[0], 10), dtype=np.float32),
         root_orient=root_orient,
-        trans=smpl_t.astype(np.float32),
+        trans=smpl_trans,
         mocap_frame_rate=np.array(src_fps, dtype=np.float32),
         gender=np.array(args.gender),
     )
@@ -261,7 +317,15 @@ def main():
 
     # 5) Build object motion npz from CARI4D pose_abs
     object_trans = pose_abs[:, :3, 3].astype(np.float32)
-    object_rot = R.from_matrix(pose_abs[:, :3, :3]).as_quat().astype(np.float32)  # xyzw
+    object_offset = np.array([args.object_offset_x, args.object_offset_y, args.object_offset_z], dtype=np.float32)
+    object_trans = object_trans + object_offset[None, :]
+    object_rot_m = R.from_matrix(pose_abs[:, :3, :3])
+    object_rot_offset = R.from_euler(
+        "xyz",
+        [args.object_rot_roll_deg, args.object_rot_pitch_deg, args.object_rot_yaw_deg],
+        degrees=True,
+    )
+    object_rot = (object_rot_m * object_rot_offset).as_quat().astype(np.float32)  # xyzw
 
     # Align lengths with human frames after fps conversion
     n = min(len(object_trans), len(root_pos))
@@ -281,10 +345,30 @@ def main():
         with open(human_pkl_path, "wb") as f:
             pickle.dump(human_motion, f)
 
+    # 6) Emit pair-named files expected by strict launcher scripts
+    pair_suffixes = _collect_pair_suffixes(args.pair_suffix, args.auto_pair_suffixes)
+    emitted_pair_files = []
+    for suffix in pair_suffixes:
+        human_pair_path = osp.join(motion_dir, f"{args.tag}_human_upright_{suffix}.pkl")
+        object_pair_path = osp.join(motion_dir, f"{args.tag}_object_upright_{suffix}.npz")
+        shutil.copyfile(human_pkl_path, human_pair_path)
+        shutil.copyfile(object_npz_path, object_pair_path)
+        emitted_pair_files.append((human_pair_path, object_pair_path))
+
     print("[Done] Generated files:")
     print("  SMPLX input:", smplx_npz_path)
     print("  Human motion:", human_pkl_path)
     print("  Object motion:", object_npz_path)
+    print("  Object translation offset:", object_offset.tolist())
+    print(
+        "  Object rotation offset deg:",
+        [float(args.object_rot_roll_deg), float(args.object_rot_pitch_deg), float(args.object_rot_yaw_deg)],
+    )
+    if emitted_pair_files:
+        print("  Upright pair files:")
+        for h, o in emitted_pair_files:
+            print("   -", h)
+            print("   -", o)
     print("  Frames:", n)
     print("  FPS:", int(np.round(aligned_fps)))
 

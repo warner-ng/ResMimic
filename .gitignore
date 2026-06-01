@@ -9,6 +9,7 @@ cmu_fbx_all/
 *ipynb
 npy
 pkl
+npz
 phc/
 
 motion_data/
