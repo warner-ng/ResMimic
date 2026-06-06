@@ -34,26 +34,6 @@ class G1HOI(G1MimicFuture):
                                     object_rot_offset_deg=getattr(self.cfg.env, "object_motion_rot_offset_deg", [0.0, 0.0, 0.0]))
         return
 
-    def _apply_global_hoi_load_offset(self, root_pos, root_rot, object_root_pos, object_root_rot):
-        rot_deg = getattr(self.cfg.env, "motion_global_rot_offset_deg", [0.0, 0.0, 0.0])
-        pos_off = getattr(self.cfg.env, "motion_global_pos_offset", [0.0, 0.0, 0.0])
-
-        r = torch.tensor(rot_deg, device=self.device, dtype=torch.float32).view(1, 3) * (torch.pi / 180.0)
-        t = torch.tensor(pos_off, device=self.device, dtype=torch.float32).view(1, 3)
-
-        if torch.all(torch.abs(r) < 1e-8) and torch.all(torch.abs(t) < 1e-8):
-            return root_pos, root_rot, object_root_pos, object_root_rot
-
-        q_off = quat_from_euler_xyz(r[:, 0], r[:, 1], r[:, 2]).expand(root_pos.shape[0], -1)
-
-        root_pos = quat_rotate(q_off, root_pos) + t
-        object_root_pos = quat_rotate(q_off, object_root_pos) + t
-        root_rot = quat_mul(q_off, root_rot)
-        object_root_rot = quat_mul(q_off, object_root_rot)
-
-        return root_pos, root_rot, object_root_pos, object_root_rot
-
-
     def _reset_ref_motion(self, env_ids, motion_ids=None):
         n = len(env_ids)
         if motion_ids is None:
@@ -68,9 +48,6 @@ class G1HOI(G1MimicFuture):
         self._motion_time_offsets[env_ids] = motion_times
         
         root_pos, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, body_pos, root_pos_delta_local, root_rot_delta_local, object_root_pos, object_root_rot = self._motion_lib.calc_hoi_motion_frame(motion_ids, motion_times)
-        root_pos, root_rot, object_root_pos, object_root_rot = self._apply_global_hoi_load_offset(
-            root_pos, root_rot, object_root_pos, object_root_rot
-        )
         root_pos[:, 2] += self.cfg.motion.height_offset
         self._ref_root_pos[env_ids] = root_pos
         self._ref_root_rot[env_ids] = root_rot
@@ -90,9 +67,6 @@ class G1HOI(G1MimicFuture):
         motion_ids = self._motion_ids
         motion_times = self._get_motion_times()
         root_pos, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, body_pos, root_pos_delta_local, root_rot_delta_local, object_root_pos, object_root_rot = self._motion_lib.calc_hoi_motion_frame(motion_ids, motion_times)
-        root_pos, root_rot, object_root_pos, object_root_rot = self._apply_global_hoi_load_offset(
-            root_pos, root_rot, object_root_pos, object_root_rot
-        )
         root_pos[:, 2] += self.cfg.motion.height_offset
         root_pos[:, :2] += self.episode_init_origin[:, :2]
         

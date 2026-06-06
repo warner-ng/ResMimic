@@ -7,10 +7,6 @@ OBJECT_VIEWER_SCALE="${OBJECT_VIEWER_SCALE:-1.0}"
 OBJECT_MESH_MIRROR_AXIS="${OBJECT_MESH_MIRROR_AXIS:-none}"
 OBJECT_SCALE_DEBUG_CUBE="${OBJECT_SCALE_DEBUG_CUBE:-0}"
 OBJECT_SCALE_MOTION_FALLBACK="${OBJECT_SCALE_MOTION_FALLBACK:-0}"
-OBJECT_RPY_ROLL_DEG="${OBJECT_RPY_ROLL_DEG:-0.0}"
-OBJECT_RPY_PITCH_DEG="${OBJECT_RPY_PITCH_DEG:-0.0}"
-OBJECT_RPY_YAW_DEG="${OBJECT_RPY_YAW_DEG:-0.0}"
-
 source "$RESMIMIC_ROOT/source_dev_setup.sh"
 cd "$RESMIMIC_ROOT"
 
@@ -39,9 +35,6 @@ python "$RESMIMIC_ROOT/scripts/play_nonphysics_viser.py" \
   --object-urdf "$RESMIMIC_ROOT/assets/hy3d_bike_cari4d/hy3d_bike_cari4d.urdf" \
   --object-scale "$OBJECT_VIEWER_SCALE" \
   --object-mesh-mirror-axis "$OBJECT_MESH_MIRROR_AXIS" \
-  --object-rpy-roll-deg "$OBJECT_RPY_ROLL_DEG" \
-  --object-rpy-pitch-deg "$OBJECT_RPY_PITCH_DEG" \
-  --object-rpy-yaw-deg "$OBJECT_RPY_YAW_DEG" \
   --host 0.0.0.0 \
   --port 8080 \
   "${EXTRA_ARGS[@]}"
