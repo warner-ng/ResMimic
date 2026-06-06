@@ -10,12 +10,16 @@ class G1HOIBikeCari4DCfg(G1HOICfg):
         object_asset_root = f"{REPO_ROOT_DIR}/assets"
         object_urdf_file = "hy3d_bike_cari4d/hy3d_bike_cari4d.urdf"
         object_obj_file = "hy3d_bike_cari4d/Date03_Sub01_bike_wild001_000_align_centered_x20.obj"
+        enable_runtime_pair_leveling = True
+        runtime_pair_level_target_z = 0.0
+        human_root_rot_offset_deg = [-90.0, -25.0, 0.0]
+        object_root_rot_offset_deg = [-90.0, 0.0, 0.0]
         object_motion_rot_offset_deg = [0.0, 0.0, 0.0]
         motion_global_rot_offset_deg = [0.000000, 180.000000, 90.000000]
         motion_global_pos_offset = [0.000000, 0.000000, 0.500000]
     class motion(G1HOICfg.motion):
-        motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_human_upright_bikez_aligned_grounded.pkl"
-        object_motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_object_upright_bikez_aligned_grounded.npz"
+        motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_human_upright_bikez_aligned.pkl"
+        object_motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_object_upright_bikez_aligned.npz"
     class rewards(G1HOICfg.rewards):
         termination_when_object_far = False
         class scales(G1HOICfg.rewards.scales):
@@ -27,12 +31,16 @@ class G1HOIBikeCari4DCfgDAgger(G1HOICfgDAgger):
         object_asset_root = f"{REPO_ROOT_DIR}/assets"
         object_urdf_file = "hy3d_bike_cari4d/hy3d_bike_cari4d.urdf"
         object_obj_file = "hy3d_bike_cari4d/Date03_Sub01_bike_wild001_000_align_centered_x20.obj"
+        enable_runtime_pair_leveling = True
+        runtime_pair_level_target_z = 0.0
+        human_root_rot_offset_deg = [-90.0, -25.0, 0.0]
+        object_root_rot_offset_deg = [-90.0, 0.0, 0.0]
         object_motion_rot_offset_deg = [0.0, 0.0, 0.0]
         motion_global_rot_offset_deg = [0.000000, 180.000000, 90.000000]
         motion_global_pos_offset = [0.000000, 0.000000, 1.000000]
     class motion(G1HOICfgDAgger.motion):
-        motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_human_upright_bikez_aligned_grounded.pkl"
-        object_motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_object_upright_bikez_aligned_grounded.npz"
+        motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_human_upright_bikez_aligned.pkl"
+        object_motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_object_upright_bikez_aligned.npz"
     class rewards(G1HOICfgDAgger.rewards):
         termination_when_object_far = False
         class scales(G1HOICfgDAgger.rewards.scales):

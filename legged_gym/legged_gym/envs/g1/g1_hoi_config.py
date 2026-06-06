@@ -12,11 +12,21 @@ class G1HOICfg(G1MimicStuFutureCfg):
         # Debug-only switch for forcing bike placement in front of robot.
         # Keep disabled in normal training/visualization to follow motion reference.
         enable_bike_test_placement = False
+        # Shared rigid transform in Isaac Gym load stage that levels human/object support points.
+        # This preserves pair relative geometry while avoiding file-space re-baking.
+        enable_runtime_pair_leveling = False
+        runtime_pair_level_target_z = 0.0
         object_asset_root = f'{LEGGED_GYM_ROOT_DIR}/assets'
         object_urdf_file = 'suitcase/suitcase.urdf'
         object_obj_file = 'suitcase/suitcase.obj'
+        # Constant human root orientation calibration in degrees [roll_x, pitch_y, yaw_z].
+        # Applied to motion root quaternions before they are written into Isaac Gym root states.
+        human_root_rot_offset_deg = [0.0, 0.0, 0.0]
         # Constant object orientation calibration in degrees [roll_x, pitch_y, yaw_z].
-        # This offsets object motion quaternions while keeping positions unchanged.
+        # Applied to object root quaternions before they are written into Isaac Gym root states.
+        object_root_rot_offset_deg = [0.0, 0.0, 0.0]
+        # Constant object orientation calibration in degrees [roll_x, pitch_y, yaw_z].
+        # This offsets object motion quaternions inside the motion loader while keeping positions unchanged.
         object_motion_rot_offset_deg = [0.0, 0.0, 0.0]
         # Global HOI transform applied at load-time in IsaacGym (not baked into motion files).
         # Applies to both human root and object root, preserving relative pose.

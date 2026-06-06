@@ -24,6 +24,7 @@ class G1HOI(G1MimicFuture):
         self.num_actors = cfg.env.num_actors
         self.all_actor_ids = torch.arange(self.num_actors * cfg.env.num_envs, device=sim_device, dtype=torch.int32).reshape(cfg.env.num_envs, self.num_actors)
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
+        self._ensure_runtime_pair_leveling_ready()
     
     def _load_motions(self):
         self._motion_lib = MotionLibHOI(motion_file=self.cfg.motion.motion_file, 
@@ -33,6 +34,96 @@ class G1HOI(G1MimicFuture):
                                     motion_smooth=self.cfg.motion.motion_smooth,
                                     object_rot_offset_deg=getattr(self.cfg.env, "object_motion_rot_offset_deg", [0.0, 0.0, 0.0]))
         return
+    # these are written by warner, to adjust data reconstructed from cari4d
+    def _ensure_runtime_pair_leveling_ready(self):
+        if not hasattr(self, "_pair_level_rot"):
+            self._pair_level_rot = torch.zeros((self.num_envs, 4), device=self.device, dtype=torch.float)
+            self._pair_level_rot[:, 3] = 1.0
+        if not hasattr(self, "_pair_level_trans"):
+            self._pair_level_trans = torch.zeros((self.num_envs, 3), device=self.device, dtype=torch.float)
+        if not hasattr(self, "_motion_foot_ids"):
+            body_link_list = getattr(self._motion_lib, "_body_link_list", []) or []
+            foot_ids = [i for i, name in enumerate(body_link_list) if any(key in name.lower() for key in ("ankle", "toe", "foot"))]
+            if len(foot_ids) == 0:
+                raise ValueError("No ankle/toe/foot links found in motion body link list for runtime pair leveling.")
+            self._motion_foot_ids = torch.tensor(foot_ids, device=self.device, dtype=torch.long)
+
+    def _compute_runtime_pair_level_transform(self, root_pos, root_rot, body_pos, object_root_pos, object_root_rot):
+        self._ensure_runtime_pair_leveling_ready()
+        num_envs = root_pos.shape[0]
+        rot_quat = torch.zeros((num_envs, 4), device=self.device, dtype=root_rot.dtype)
+        rot_quat[:, 3] = 1.0
+        trans = torch.zeros((num_envs, 3), device=self.device, dtype=root_pos.dtype)
+        if not getattr(self.cfg.env, "enable_runtime_pair_leveling", False):
+            return rot_quat, trans
+
+        foot_local = body_pos[:, self._motion_foot_ids, :]
+        foot_rot = root_rot.unsqueeze(1).expand(-1, foot_local.shape[1], -1).reshape(-1, 4)
+        foot_local_flat = foot_local.reshape(-1, 3)
+        world_feet = quat_rotate(foot_rot, foot_local_flat).view(num_envs, foot_local.shape[1], 3) + root_pos.unsqueeze(1)
+        human_support = world_feet[torch.arange(num_envs, device=self.device), torch.argmin(world_feet[:, :, 2], dim=1)]
+
+        obj_local = self.object_points.unsqueeze(0).expand(num_envs, -1, -1)
+        obj_rot_expand = object_root_rot.unsqueeze(1).expand(-1, obj_local.shape[1], -1).reshape(-1, 4)
+        obj_local_flat = obj_local.reshape(-1, 3)
+        world_obj = quat_rotate(obj_rot_expand, obj_local_flat).view(num_envs, obj_local.shape[1], 3) + object_root_pos.unsqueeze(1)
+        object_support = world_obj[torch.arange(num_envs, device=self.device), torch.argmin(world_obj[:, :, 2], dim=1)]
+
+        d = human_support - object_support
+        h = d.clone()
+        h[:, 2] = 0.0
+        h_norm = torch.norm(h, dim=1)
+        d_norm = torch.norm(d, dim=1)
+        valid = (h_norm > 1e-6) & (d_norm > 1e-6) & (torch.abs(d[:, 2]) > 1e-6)
+        if valid.any():
+            axis = torch.cross(d[valid], h[valid], dim=1)
+            axis_norm = torch.norm(axis, dim=1)
+            valid_axis = axis_norm > 1e-6
+            if valid_axis.any():
+                cos = torch.sum(d[valid][valid_axis] * h[valid][valid_axis], dim=1) / (d_norm[valid][valid_axis] * h_norm[valid][valid_axis])
+                cos = torch.clamp(cos, -1.0, 1.0)
+                angle = torch.acos(cos)
+                rot_quat_valid = torch_utils.quat_from_angle_axis(angle, axis[valid_axis] / axis_norm[valid_axis].unsqueeze(1))
+                rot_quat[valid.nonzero(as_tuple=False).flatten()[valid_axis]] = rot_quat_valid
+
+        midpoint = 0.5 * (human_support + object_support)
+        midpoint_rot = quat_rotate(rot_quat, midpoint)
+        trans = midpoint - midpoint_rot
+
+        leveled_human_support = quat_rotate(rot_quat, human_support) + trans
+        leveled_object_support = quat_rotate(rot_quat, object_support) + trans
+        target_z = getattr(self.cfg.env, "runtime_pair_level_target_z", 0.0)
+        avg_support_z = 0.5 * (leveled_human_support[:, 2] + leveled_object_support[:, 2])
+        trans[:, 2] += target_z - avg_support_z
+        return rot_quat, trans
+
+    def _apply_runtime_pair_level_transform(self, env_ids, root_pos, root_rot, object_root_pos, object_root_rot):
+        rot_quat = self._pair_level_rot[env_ids]
+        trans = self._pair_level_trans[env_ids]
+        root_pos = quat_rotate(rot_quat, root_pos) + trans
+        object_root_pos = quat_rotate(rot_quat, object_root_pos) + trans
+        root_rot = quat_mul(rot_quat, root_rot)
+        object_root_rot = quat_mul(rot_quat, object_root_rot)
+        return root_pos, root_rot, object_root_pos, object_root_rot
+
+    def _apply_human_root_rot_offset(self, root_rot):
+        offset_deg = getattr(self.cfg.env, "human_root_rot_offset_deg", [0.0, 0.0, 0.0])
+        return self._apply_root_rot_offset(root_rot, offset_deg)
+
+    def _apply_object_root_rot_offset(self, root_rot):
+        offset_deg = getattr(self.cfg.env, "object_root_rot_offset_deg", [0.0, 0.0, 0.0])
+        return self._apply_root_rot_offset(root_rot, offset_deg)
+
+    def _apply_root_rot_offset(self, root_rot, offset_deg):
+        if all(abs(v) < 1e-8 for v in offset_deg):
+            return root_rot
+        offset = torch.tensor(offset_deg, device=root_rot.device, dtype=root_rot.dtype) * (torch.pi / 180.0)
+        offset_quat = quat_from_euler_xyz(
+            torch.full_like(root_rot[:, 0], offset[0]),
+            torch.full_like(root_rot[:, 1], offset[1]),
+            torch.full_like(root_rot[:, 2], offset[2]),
+        )
+        return quat_mul(offset_quat, root_rot)
 
     def _reset_ref_motion(self, env_ids, motion_ids=None):
         n = len(env_ids)
@@ -48,6 +139,23 @@ class G1HOI(G1MimicFuture):
         self._motion_time_offsets[env_ids] = motion_times
         
         root_pos, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, body_pos, root_pos_delta_local, root_rot_delta_local, object_root_pos, object_root_rot = self._motion_lib.calc_hoi_motion_frame(motion_ids, motion_times)
+        root_rot = self._apply_human_root_rot_offset(root_rot)
+        object_root_rot = self._apply_object_root_rot_offset(object_root_rot)
+        pair_rot, pair_trans = self._compute_runtime_pair_level_transform(root_pos, root_rot, body_pos, object_root_pos, object_root_rot)
+        self._pair_level_rot[env_ids] = pair_rot
+        self._pair_level_trans[env_ids] = pair_trans
+        root_pos, root_rot, object_root_pos, object_root_rot = self._apply_runtime_pair_level_transform(env_ids, root_pos, root_rot, object_root_pos, object_root_rot)
+        if not hasattr(self, "_printed_init_root_euler"):
+            self._printed_init_root_euler = False
+        if not self._printed_init_root_euler and root_rot.shape[0] > 0:
+            roll, pitch, yaw = euler_from_quaternion(root_rot[:1])
+            print(
+                f"[G1HOI] init leveled human root euler deg: "
+                f"roll={torch.rad2deg(roll[0]).item():.2f}, "
+                f"pitch={torch.rad2deg(pitch[0]).item():.2f}, "
+                f"yaw={torch.rad2deg(yaw[0]).item():.2f}"
+            )
+            self._printed_init_root_euler = True
         root_pos[:, 2] += self.cfg.motion.height_offset
         self._ref_root_pos[env_ids] = root_pos
         self._ref_root_rot[env_ids] = root_rot
@@ -67,6 +175,10 @@ class G1HOI(G1MimicFuture):
         motion_ids = self._motion_ids
         motion_times = self._get_motion_times()
         root_pos, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, body_pos, root_pos_delta_local, root_rot_delta_local, object_root_pos, object_root_rot = self._motion_lib.calc_hoi_motion_frame(motion_ids, motion_times)
+        root_rot = self._apply_human_root_rot_offset(root_rot)
+        object_root_rot = self._apply_object_root_rot_offset(object_root_rot)
+        env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
+        root_pos, root_rot, object_root_pos, object_root_rot = self._apply_runtime_pair_level_transform(env_ids, root_pos, root_rot, object_root_pos, object_root_rot)
         root_pos[:, 2] += self.cfg.motion.height_offset
         root_pos[:, :2] += self.episode_init_origin[:, :2]
         

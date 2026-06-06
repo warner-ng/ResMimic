@@ -53,6 +53,12 @@ OBJECT_SCALE_DEBUG_CUBE="${OBJECT_SCALE_DEBUG_CUBE:-0}"  # <<< 改这里：1=显
 OBJECT_SCALE_MOTION_FALLBACK="${OBJECT_SCALE_MOTION_FALLBACK:-0}"  # <<< 改这里：1=启用轨迹缩放兜底
 ALIGN_HUMAN_YAW_TO_OBJECT="${ALIGN_HUMAN_YAW_TO_OBJECT:-0}"  # <<< 按需改：1=额外做整段刚体yaw旋转
 TARGET_PAIR_GROUND_Z="${TARGET_PAIR_GROUND_Z:-0.0}"  # <<< 按需改：pair几何最低点要落到的地面z
+HUMAN_ROOT_ROT_ROLL_DEG="${HUMAN_ROOT_ROT_ROLL_DEG:--90.0}"  # <<< 按需改：Isaac Gym 载入阶段的人体root roll补偿
+HUMAN_ROOT_ROT_PITCH_DEG="${HUMAN_ROOT_ROT_PITCH_DEG:--25.0}"  # <<< 按需改：Isaac Gym 载入阶段的人体root pitch补偿
+HUMAN_ROOT_ROT_YAW_DEG="${HUMAN_ROOT_ROT_YAW_DEG:-0.0}"  # <<< 按需改：Isaac Gym 载入阶段的人体root yaw补偿
+OBJECT_ROOT_ROT_ROLL_DEG="${OBJECT_ROOT_ROT_ROLL_DEG:--90.0}"  # <<< 按需改：Isaac Gym 载入阶段的物体root roll补偿
+OBJECT_ROOT_ROT_PITCH_DEG="${OBJECT_ROOT_ROT_PITCH_DEG:-0.0}"  # <<< 按需改：Isaac Gym 载入阶段的物体root pitch补偿
+OBJECT_ROOT_ROT_YAW_DEG="${OBJECT_ROOT_ROT_YAW_DEG:-0.0}"  # <<< 按需改：Isaac Gym 载入阶段的物体root yaw补偿
 
 # 任务与训练
 TASK="${TASK:-g1_hoi_bike_cari4d}"  # bike 任务名
@@ -61,7 +67,7 @@ EXPTID="${EXPTID:-bike_gui_train}"
 DEVICE="${DEVICE:-cuda:0}"
 NUM_ENVS="${NUM_ENVS:-1}"
 WAND_ENTITY="${WAND_ENTITY:-warner0709-shanghai-ai-lab}"
-TRAIN_HEADLESS="${TRAIN_HEADLESS:-1}"  # 1=headless训练
+TRAIN_HEADLESS="${TRAIN_HEADLESS:-0}"  # 0=默认有头训练，1=headless训练
 TRAIN_MAX_ITERATIONS="${TRAIN_MAX_ITERATIONS:-900}"
 
 # 载入 IsaacGym 后的全局偏移请手动改这里：
@@ -212,23 +218,26 @@ python "$RESMIMIC_ROOT/scripts/compare_gmr_root_motion.py" \
   --post-human "$ALIGNED_HUMAN" \
   --object "$OBJECT_PAIR"
 
-echo "[3.5/5] 对 human/object 同时施加共享刚体 z 平移，使 pair 几何落到地面..."
+echo "[3.5/5] 旧 ground 脚本已停用，改为 Isaac Gym 载入阶段做共享 pair leveling..."
 cp -f "$OBJECT_PAIR" "$ALIGNED_OBJECT"
-python "$RESMIMIC_ROOT/scripts/ground_human_object_pair.py" \
-  --human "$ALIGNED_HUMAN" \
-  --object "$ALIGNED_OBJECT" \
-  --object-mesh "$OBJECT_MESH" \
-  --output-human "$GROUNDED_HUMAN" \
-  --output-object "$GROUNDED_OBJECT" \
-  --target-ground-z "$TARGET_PAIR_GROUND_Z" \
-  --stat first
+# 旧逻辑保留为注释，便于对照：
+# python "$RESMIMIC_ROOT/scripts/ground_human_object_pair.py" \
+#   --human "$ALIGNED_HUMAN" \
+#   --object "$ALIGNED_OBJECT" \
+#   --object-mesh "$OBJECT_MESH" \
+#   --output-human "$GROUNDED_HUMAN" \
+#   --output-object "$GROUNDED_OBJECT" \
+#   --target-ground-z "$TARGET_PAIR_GROUND_Z" \
+#   --stat first
 
 ########################################
 # 4) 自动同步 bike config（含 IsaacGym 载入阶段偏移）
 ########################################
 
-echo "[4/6] 自动同步 bike config（仅 motion 路径）..."
+echo "[4/6] 自动同步 bike config（motion 路径 + root rotation offsets）..."
 export CFG_FILE TAG PAIR_SUFFIX
+export HUMAN_ROOT_ROT_ROLL_DEG HUMAN_ROOT_ROT_PITCH_DEG HUMAN_ROOT_ROT_YAW_DEG
+export OBJECT_ROOT_ROT_ROLL_DEG OBJECT_ROOT_ROT_PITCH_DEG OBJECT_ROOT_ROT_YAW_DEG
 python - <<'PY'
 import os
 import re
@@ -236,15 +245,19 @@ import re
 cfg = os.environ["CFG_FILE"]
 tag = os.environ["TAG"]
 pair = os.environ["PAIR_SUFFIX"]
+human_root_rot = f'[{float(os.environ["HUMAN_ROOT_ROT_ROLL_DEG"]):.1f}, {float(os.environ["HUMAN_ROOT_ROT_PITCH_DEG"]):.1f}, {float(os.environ["HUMAN_ROOT_ROT_YAW_DEG"]):.1f}]'
+object_root_rot = f'[{float(os.environ["OBJECT_ROOT_ROT_ROLL_DEG"]):.1f}, {float(os.environ["OBJECT_ROOT_ROT_PITCH_DEG"]):.1f}, {float(os.environ["OBJECT_ROOT_ROT_YAW_DEG"]):.1f}]'
 
 with open(cfg, "r", encoding="utf-8") as f:
     s = f.read()
 
-motion_line = f'motion_file = f"{{REPO_ROOT_DIR}}/assets/motions/{tag}_human_upright_{pair}_aligned_grounded.pkl"'
-obj_line = f'object_motion_file = f"{{REPO_ROOT_DIR}}/assets/motions/{tag}_object_upright_{pair}_aligned_grounded.npz"'
+motion_line = f'motion_file = f"{{REPO_ROOT_DIR}}/assets/motions/{tag}_human_upright_{pair}_aligned.pkl"'
+obj_line = f'object_motion_file = f"{{REPO_ROOT_DIR}}/assets/motions/{tag}_object_upright_{pair}_aligned.npz"'
 
 s = re.sub(r'^\s*motion_file\s*=\s*f"\{REPO_ROOT_DIR\}/assets/motions/.*?"\s*$', '        ' + motion_line, s, flags=re.MULTILINE)
 s = re.sub(r'^\s*object_motion_file\s*=\s*f"\{REPO_ROOT_DIR\}/assets/motions/.*?"\s*$', '        ' + obj_line, s, flags=re.MULTILINE)
+s = re.sub(r'^\s*human_root_rot_offset_deg\s*=\s*\[.*?\]\s*$', '        human_root_rot_offset_deg = ' + human_root_rot, s, flags=re.MULTILINE)
+s = re.sub(r'^\s*object_root_rot_offset_deg\s*=\s*\[.*?\]\s*$', '        object_root_rot_offset_deg = ' + object_root_rot, s, flags=re.MULTILINE)
 s = re.sub(r'^\s*object_motion_rot_offset_deg\s*=\s*\[.*?\]\s*$', '        object_motion_rot_offset_deg = [0.0, 0.0, 0.0]', s, flags=re.MULTILINE)
 
 with open(cfg, "w", encoding="utf-8") as f:
@@ -259,9 +272,9 @@ PY
 
 echo "[5/6] 启动 nonphysics viewer..."
 PRE_HUMAN="$PRE_HUMAN" \
-POST_HUMAN="$GROUNDED_HUMAN" \
-OBJECT_MOTION="$GROUNDED_OBJECT" \
-ALIGNED_HUMAN="$GROUNDED_HUMAN" \
+POST_HUMAN="$ALIGNED_HUMAN" \
+OBJECT_MOTION="$ALIGNED_OBJECT" \
+ALIGNED_HUMAN="$ALIGNED_HUMAN" \
 OBJECT_VIEWER_SCALE="$OBJECT_VIEWER_SCALE" \
 OBJECT_MESH_MIRROR_AXIS="$OBJECT_MESH_MIRROR_AXIS" \
 OBJECT_RPY_ROLL_DEG="$OBJECT_RPY_ROLL_DEG" \
@@ -289,6 +302,7 @@ TRAIN_ARGS=(
   --num_envs "$NUM_ENVS"
   --wandb_entity "$WAND_ENTITY"
   --max_iterations "$TRAIN_MAX_ITERATIONS"
+  
 )
 if [[ "$TRAIN_HEADLESS" == "1" ]]; then
   TRAIN_ARGS+=(--headless)
