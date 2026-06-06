@@ -52,6 +52,7 @@ OBJECT_RPY_YAW_DEG="${OBJECT_RPY_YAW_DEG:-0.0}"  # <<< 改这里：viser里额�
 OBJECT_SCALE_DEBUG_CUBE="${OBJECT_SCALE_DEBUG_CUBE:-0}"  # <<< 改这里：1=显示红色debug立方体
 OBJECT_SCALE_MOTION_FALLBACK="${OBJECT_SCALE_MOTION_FALLBACK:-0}"  # <<< 改这里：1=启用轨迹缩放兜底
 ALIGN_HUMAN_YAW_TO_OBJECT="${ALIGN_HUMAN_YAW_TO_OBJECT:-0}"  # <<< 按需改：1=额外做整段刚体yaw旋转
+TARGET_PAIR_GROUND_Z="${TARGET_PAIR_GROUND_Z:-0.0}"  # <<< 按需改：pair几何最低点要落到的地面z
 
 # 任务与训练
 TASK="${TASK:-g1_hoi_bike_cari4d}"  # bike 任务名
@@ -60,6 +61,8 @@ EXPTID="${EXPTID:-bike_gui_train}"
 DEVICE="${DEVICE:-cuda:0}"
 NUM_ENVS="${NUM_ENVS:-1}"
 WAND_ENTITY="${WAND_ENTITY:-warner0709-shanghai-ai-lab}"
+TRAIN_HEADLESS="${TRAIN_HEADLESS:-1}"  # 1=headless训练
+TRAIN_MAX_ITERATIONS="${TRAIN_MAX_ITERATIONS:-900}"
 
 # 载入 IsaacGym 后的全局偏移请手动改这里：
 #   /home/warner/_projects/ResMimic/legged_gym/legged_gym/envs/g1/g1_hoi_bike_cari4d_config.py
@@ -74,8 +77,12 @@ HUMAN_BASE="$MOTION_DIR/${TAG}_human.pkl"
 OBJECT_BASE="$MOTION_DIR/${TAG}_object.npz"
 HUMAN_PAIR="$MOTION_DIR/${TAG}_human_upright_${PAIR_SUFFIX}.pkl"
 OBJECT_PAIR="$MOTION_DIR/${TAG}_object_upright_${PAIR_SUFFIX}.npz"
+OBJECT_MESH="$RESMIMIC_ROOT/assets/hy3d_bike_cari4d/Date03_Sub01_bike_wild001_000_align_centered_x20.obj"
 PRE_HUMAN="$MOTION_DIR/${TAG}_smplx_input.npz"
 ALIGNED_HUMAN="$MOTION_DIR/${TAG}_human_upright_${PAIR_SUFFIX}_aligned.pkl"
+ALIGNED_OBJECT="$MOTION_DIR/${TAG}_object_upright_${PAIR_SUFFIX}_aligned.npz"
+GROUNDED_HUMAN="$MOTION_DIR/${TAG}_human_upright_${PAIR_SUFFIX}_aligned_grounded.pkl"
+GROUNDED_OBJECT="$MOTION_DIR/${TAG}_object_upright_${PAIR_SUFFIX}_aligned_grounded.npz"
 
 # ===== 逐行调试：手动生成配对文件（可直接复制执行）=====
 # cp -f "$HUMAN_BASE" "$HUMAN_PAIR"
@@ -94,6 +101,7 @@ ALLOW_FALLBACK_PAIR="${ALLOW_FALLBACK_PAIR:-0}"  # <<< 按需改
 [[ -f "$RESMIMIC_ROOT/source_dev_setup.sh" ]] || die "未找到 $RESMIMIC_ROOT/source_dev_setup.sh（当前 RESMIMIC_ROOT=$RESMIMIC_ROOT）。逐行调试可先设置 RESMIMIC_ROOT=/home/warner/_projects/ResMimic。"
 [[ -f "$RESMIMIC_ROOT/scripts/export_cari4d_intermediate.py" ]] || die "未找到 CARI4D 导出脚本: $RESMIMIC_ROOT/scripts/export_cari4d_intermediate.py"
 [[ -f "$RESMIMIC_ROOT/scripts/retarget_smplx_to_resmimic.py" ]] || die "未找到 GMR retarget 脚本: $RESMIMIC_ROOT/scripts/retarget_smplx_to_resmimic.py"
+[[ -f "$RESMIMIC_ROOT/scripts/ground_human_object_pair.py" ]] || die "未找到 ground 配对脚本: $RESMIMIC_ROOT/scripts/ground_human_object_pair.py"
 [[ -f "$CFG_FILE" ]] || die "未找到 bike 配置文件: $CFG_FILE"
 [[ -f "$CARI4D_PTH" ]] || die "输入 pth 不存在: $CARI4D_PTH"
 [[ -d "$CARI4D_ROOT" ]] || die "CARI4D_ROOT 不存在: $CARI4D_ROOT"
@@ -108,6 +116,18 @@ echo "[INFO] RESMIMIC_ROOT=$RESMIMIC_ROOT"
 
 source "$RESMIMIC_ROOT/source_dev_setup.sh"
 cd "$RESMIMIC_ROOT"
+
+# Align runtime loader path with the actual active Python env so Isaac Gym can
+# resolve libpython3.8.so.1.0 from the same env as `python`.
+ACTIVE_PY_PREFIX="$(python - <<'PY'
+import sys
+print(sys.prefix)
+PY
+)"
+if [[ -n "$ACTIVE_PY_PREFIX" && -d "$ACTIVE_PY_PREFIX/lib" ]]; then
+  export LD_LIBRARY_PATH="$ACTIVE_PY_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+fi
+export PYTHONPATH="$RESMIMIC_ROOT/legged_gym:${PYTHONPATH:-}"
 
 echo "[1/5] 用 CARI4D 环境从 pth 导出 smplx/object..."
 EXPORT_ARGS=(
@@ -192,11 +212,22 @@ python "$RESMIMIC_ROOT/scripts/compare_gmr_root_motion.py" \
   --post-human "$ALIGNED_HUMAN" \
   --object "$OBJECT_PAIR"
 
+echo "[3.5/5] 对 human/object 同时施加共享刚体 z 平移，使 pair 几何落到地面..."
+cp -f "$OBJECT_PAIR" "$ALIGNED_OBJECT"
+python "$RESMIMIC_ROOT/scripts/ground_human_object_pair.py" \
+  --human "$ALIGNED_HUMAN" \
+  --object "$ALIGNED_OBJECT" \
+  --object-mesh "$OBJECT_MESH" \
+  --output-human "$GROUNDED_HUMAN" \
+  --output-object "$GROUNDED_OBJECT" \
+  --target-ground-z "$TARGET_PAIR_GROUND_Z" \
+  --stat first
+
 ########################################
 # 4) 自动同步 bike config（含 IsaacGym 载入阶段偏移）
 ########################################
 
-echo "[4/5] 自动同步 bike config（仅 motion 路径；load偏移请手动改配置）..."
+echo "[4/6] 自动同步 bike config（仅 motion 路径）..."
 export CFG_FILE TAG PAIR_SUFFIX
 python - <<'PY'
 import os
@@ -209,8 +240,8 @@ pair = os.environ["PAIR_SUFFIX"]
 with open(cfg, "r", encoding="utf-8") as f:
     s = f.read()
 
-motion_line = f'motion_file = f"{{REPO_ROOT_DIR}}/assets/motions/{tag}_human_upright_{pair}_aligned.pkl"'
-obj_line = f'object_motion_file = f"{{REPO_ROOT_DIR}}/assets/motions/{tag}_object_upright_{pair}.npz"'
+motion_line = f'motion_file = f"{{REPO_ROOT_DIR}}/assets/motions/{tag}_human_upright_{pair}_aligned_grounded.pkl"'
+obj_line = f'object_motion_file = f"{{REPO_ROOT_DIR}}/assets/motions/{tag}_object_upright_{pair}_aligned_grounded.npz"'
 
 s = re.sub(r'^\s*motion_file\s*=\s*f"\{REPO_ROOT_DIR\}/assets/motions/.*?"\s*$', '        ' + motion_line, s, flags=re.MULTILINE)
 s = re.sub(r'^\s*object_motion_file\s*=\s*f"\{REPO_ROOT_DIR\}/assets/motions/.*?"\s*$', '        ' + obj_line, s, flags=re.MULTILINE)
@@ -220,21 +251,17 @@ with open(cfg, "w", encoding="utf-8") as f:
     f.write(s)
 
 print("[OK] Config updated:", cfg)
-for line in s.splitlines():
-  t = line.strip()
-  if t.startswith("motion_global_rot_offset_deg") or t.startswith("motion_global_pos_offset"):
-    print("[MANUAL]", t)
 PY
 
 ########################################
-# 5) 启动非物理可视化（便于调偏移）
+# 5) 启动非物理可视化
 ########################################
 
-echo "[5/5] 启动 nonphysics viewer（训练阶段保持关闭）..."
+echo "[5/6] 启动 nonphysics viewer..."
 PRE_HUMAN="$PRE_HUMAN" \
-POST_HUMAN="$HUMAN_PAIR" \
-OBJECT_MOTION="$OBJECT_PAIR" \
-ALIGNED_HUMAN="$ALIGNED_HUMAN" \
+POST_HUMAN="$GROUNDED_HUMAN" \
+OBJECT_MOTION="$GROUNDED_OBJECT" \
+ALIGNED_HUMAN="$GROUNDED_HUMAN" \
 OBJECT_VIEWER_SCALE="$OBJECT_VIEWER_SCALE" \
 OBJECT_MESH_MIRROR_AXIS="$OBJECT_MESH_MIRROR_AXIS" \
 OBJECT_RPY_ROLL_DEG="$OBJECT_RPY_ROLL_DEG" \
@@ -243,4 +270,27 @@ OBJECT_RPY_YAW_DEG="$OBJECT_RPY_YAW_DEG" \
 OBJECT_SCALE_DEBUG_CUBE="$OBJECT_SCALE_DEBUG_CUBE" \
 OBJECT_SCALE_MOTION_FALLBACK="$OBJECT_SCALE_MOTION_FALLBACK" \
 ALIGN_HUMAN_YAW_TO_OBJECT="$ALIGN_HUMAN_YAW_TO_OBJECT" \
-bash "$RESMIMIC_ROOT/run_nonphysics_chair_viewer.sh"
+TARGET_PAIR_GROUND_Z="$TARGET_PAIR_GROUND_Z" \
+bash "$RESMIMIC_ROOT/run_nonphysics_chair_viewer.sh" &
+VIEWER_PID=$!
+echo "[INFO] viewer pid=$VIEWER_PID"
+
+########################################
+# 6) 启动 Isaac Gym 训练
+########################################
+
+echo "[6/6] 启动 Isaac Gym 训练..."
+TRAIN_ARGS=(
+  --task "$TASK"
+  --proj_name "$PROJ_NAME"
+  --exptid "$EXPTID"
+  --device "$DEVICE"
+  --teacher_exptid None
+  --num_envs "$NUM_ENVS"
+  --wandb_entity "$WAND_ENTITY"
+  --max_iterations "$TRAIN_MAX_ITERATIONS"
+)
+if [[ "$TRAIN_HEADLESS" == "1" ]]; then
+  TRAIN_ARGS+=(--headless)
+fi
+python "$RESMIMIC_ROOT/legged_gym/legged_gym/scripts/train.py" "${TRAIN_ARGS[@]}"
