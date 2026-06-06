@@ -7,6 +7,7 @@ OBJECT_VIEWER_SCALE="${OBJECT_VIEWER_SCALE:-1.0}"
 OBJECT_MESH_MIRROR_AXIS="${OBJECT_MESH_MIRROR_AXIS:-none}"
 OBJECT_SCALE_DEBUG_CUBE="${OBJECT_SCALE_DEBUG_CUBE:-0}"
 OBJECT_SCALE_MOTION_FALLBACK="${OBJECT_SCALE_MOTION_FALLBACK:-0}"
+ALIGN_HUMAN_YAW_TO_OBJECT="${ALIGN_HUMAN_YAW_TO_OBJECT:-0}"
 source "$RESMIMIC_ROOT/source_dev_setup.sh"
 cd "$RESMIMIC_ROOT"
 
@@ -20,6 +21,38 @@ cd "$RESMIMIC_ROOT"
 #   --port 8080
 
 # Bike version
+PRE_HUMAN="${PRE_HUMAN:-$RESMIMIC_ROOT/assets/motions/Date03_Sub01_bike_May_31_19_34_smplx_input.npz}"
+POST_HUMAN="${POST_HUMAN:-$RESMIMIC_ROOT/assets/motions/Date03_Sub01_bike_May_31_19_34_human_upright_bikez.pkl}"
+OBJECT_MOTION="${OBJECT_MOTION:-$RESMIMIC_ROOT/assets/motions/Date03_Sub01_bike_May_31_19_34_object_upright_bikez.npz}"
+ALIGNED_HUMAN="${ALIGNED_HUMAN:-$RESMIMIC_ROOT/assets/motions/Date03_Sub01_bike_May_31_19_34_human_upright_bikez_aligned.pkl}"
+
+echo "[1/3] Compare pre-GMR vs post-GMR root motion"
+python "$RESMIMIC_ROOT/scripts/compare_gmr_root_motion.py" \
+  --pre-human "$PRE_HUMAN" \
+  --post-human "$POST_HUMAN" \
+  --object "$OBJECT_MOTION"
+
+echo
+echo "[2/3] Build rigidly aligned post-GMR human motion"
+ALIGN_ARGS=()
+if [[ "$ALIGN_HUMAN_YAW_TO_OBJECT" == "1" ]]; then
+  ALIGN_ARGS+=(--align-yaw)
+fi
+python "$RESMIMIC_ROOT/scripts/align_human_root_to_object.py" \
+  --human "$POST_HUMAN" \
+  --object "$OBJECT_MOTION" \
+  --output "$ALIGNED_HUMAN" \
+  "${ALIGN_ARGS[@]}"
+
+echo
+echo "[2.5/3] Re-check aligned human vs object root motion"
+python "$RESMIMIC_ROOT/scripts/compare_gmr_root_motion.py" \
+  --pre-human "$PRE_HUMAN" \
+  --post-human "$ALIGNED_HUMAN" \
+  --object "$OBJECT_MOTION"
+
+echo
+echo "[3/3] Launch viser preview with aligned human motion"
 EXTRA_ARGS=()
 if [[ "$OBJECT_SCALE_DEBUG_CUBE" == "1" ]]; then
   EXTRA_ARGS+=(--debug-object-scale-cube)
@@ -29,8 +62,8 @@ if [[ "$OBJECT_SCALE_MOTION_FALLBACK" == "1" ]]; then
 fi
 
 python "$RESMIMIC_ROOT/scripts/play_nonphysics_viser.py" \
-  --human "$RESMIMIC_ROOT/assets/motions/Date03_Sub01_bike_May_31_19_34_human_upright_bikez.pkl" \
-  --object "$RESMIMIC_ROOT/assets/motions/Date03_Sub01_bike_May_31_19_34_object_upright_bikez.npz" \
+  --human "$ALIGNED_HUMAN" \
+  --object "$OBJECT_MOTION" \
   --robot-urdf "$RESMIMIC_ROOT/assets/g1/g1_custom_collision_29dof.urdf" \
   --object-urdf "$RESMIMIC_ROOT/assets/hy3d_bike_cari4d/hy3d_bike_cari4d.urdf" \
   --object-scale "$OBJECT_VIEWER_SCALE" \

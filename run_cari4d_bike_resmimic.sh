@@ -29,6 +29,8 @@ fi
 RESMIMIC_ROOT="${RESMIMIC_ROOT:-$DEFAULT_RESMIMIC_ROOT}"
 GMR_ROOT="${GMR_ROOT:-/home/warner/_projects/GMR}"
 CARI4D_ROOT="${CARI4D_ROOT:-/home/warner/_projects/CARI4D}"  # <<< 按需改：CARI4D 仓库根目录
+CARI4D_PYTHON="${CARI4D_PYTHON:-/home/warner/miniconda3/envs/cari4d/bin/python}"  # <<< 按需改：用于读取 CARI4D pth
+GMR_PYTHON="${GMR_PYTHON:-/home/warner/miniconda3/envs/gmr/bin/python}"  # <<< 按需改：用于 GMR retarget
 
 # 你这次提供的 Step7 输出
 CARI4D_PTH="${CARI4D_PTH:-/home/warner/_projects/CARI4D/output/opt/cari4d-release+step031397_demo_20260531-202214-hy3d3-optv2_20260531-202214/Date03_Sub01_bike_May_31_19_34.pth}"  # <<< 改这里
@@ -49,6 +51,7 @@ OBJECT_RPY_PITCH_DEG="${OBJECT_RPY_PITCH_DEG:-0.0}"  # <<< 改这里：viser里�
 OBJECT_RPY_YAW_DEG="${OBJECT_RPY_YAW_DEG:-0.0}"  # <<< 改这里：viser里额外yaw角度
 OBJECT_SCALE_DEBUG_CUBE="${OBJECT_SCALE_DEBUG_CUBE:-0}"  # <<< 改这里：1=显示红色debug立方体
 OBJECT_SCALE_MOTION_FALLBACK="${OBJECT_SCALE_MOTION_FALLBACK:-0}"  # <<< 改这里：1=启用轨迹缩放兜底
+ALIGN_HUMAN_YAW_TO_OBJECT="${ALIGN_HUMAN_YAW_TO_OBJECT:-0}"  # <<< 按需改：1=额外做整段刚体yaw旋转
 
 # 任务与训练
 TASK="${TASK:-g1_hoi_bike_cari4d}"  # bike 任务名
@@ -71,6 +74,8 @@ HUMAN_BASE="$MOTION_DIR/${TAG}_human.pkl"
 OBJECT_BASE="$MOTION_DIR/${TAG}_object.npz"
 HUMAN_PAIR="$MOTION_DIR/${TAG}_human_upright_${PAIR_SUFFIX}.pkl"
 OBJECT_PAIR="$MOTION_DIR/${TAG}_object_upright_${PAIR_SUFFIX}.npz"
+PRE_HUMAN="$MOTION_DIR/${TAG}_smplx_input.npz"
+ALIGNED_HUMAN="$MOTION_DIR/${TAG}_human_upright_${PAIR_SUFFIX}_aligned.pkl"
 
 # ===== 逐行调试：手动生成配对文件（可直接复制执行）=====
 # cp -f "$HUMAN_BASE" "$HUMAN_PAIR"
@@ -87,10 +92,13 @@ ALLOW_FALLBACK_PAIR="${ALLOW_FALLBACK_PAIR:-0}"  # <<< 按需改
 
 # 基础校验（避免在任意目录手敲片段时路径错位）
 [[ -f "$RESMIMIC_ROOT/source_dev_setup.sh" ]] || die "未找到 $RESMIMIC_ROOT/source_dev_setup.sh（当前 RESMIMIC_ROOT=$RESMIMIC_ROOT）。逐行调试可先设置 RESMIMIC_ROOT=/home/warner/_projects/ResMimic。"
-[[ -f "$RESMIMIC_ROOT/scripts/prepare_cari4d_hoi_motion.py" ]] || die "未找到转换脚本: $RESMIMIC_ROOT/scripts/prepare_cari4d_hoi_motion.py"
+[[ -f "$RESMIMIC_ROOT/scripts/export_cari4d_intermediate.py" ]] || die "未找到 CARI4D 导出脚本: $RESMIMIC_ROOT/scripts/export_cari4d_intermediate.py"
+[[ -f "$RESMIMIC_ROOT/scripts/retarget_smplx_to_resmimic.py" ]] || die "未找到 GMR retarget 脚本: $RESMIMIC_ROOT/scripts/retarget_smplx_to_resmimic.py"
 [[ -f "$CFG_FILE" ]] || die "未找到 bike 配置文件: $CFG_FILE"
 [[ -f "$CARI4D_PTH" ]] || die "输入 pth 不存在: $CARI4D_PTH"
 [[ -d "$CARI4D_ROOT" ]] || die "CARI4D_ROOT 不存在: $CARI4D_ROOT"
+[[ -x "$CARI4D_PYTHON" ]] || die "CARI4D_PYTHON 不可执行: $CARI4D_PYTHON"
+[[ -x "$GMR_PYTHON" ]] || die "GMR_PYTHON 不可执行: $GMR_PYTHON"
 
 echo "[INFO] RESMIMIC_ROOT=$RESMIMIC_ROOT"
 
@@ -101,15 +109,15 @@ echo "[INFO] RESMIMIC_ROOT=$RESMIMIC_ROOT"
 source "$RESMIMIC_ROOT/source_dev_setup.sh"
 cd "$RESMIMIC_ROOT"
 
-echo "[1/5] 从 CARI4D pth 生成 smplx/human/object..."
-PREP_ARGS=(
+echo "[1/5] 用 CARI4D 环境从 pth 导出 smplx/object..."
+EXPORT_ARGS=(
   --cari4d_pth "$CARI4D_PTH"
   --split "$SPLIT"
   --tag "$TAG"
   --resmimic_root "$RESMIMIC_ROOT"
-  --gmr_root "$GMR_ROOT"
   --cari4d_root "$CARI4D_ROOT"
   --motion_dir "$MOTION_DIR"
+  --pair_suffix "$PAIR_SUFFIX"
   --object_offset_x "$OBJECT_OFFSET_X"
   --object_offset_y "$OBJECT_OFFSET_Y"
   --object_offset_z "$OBJECT_OFFSET_Z"
@@ -118,7 +126,17 @@ PREP_ARGS=(
   --object_rot_yaw_deg "$OBJECT_ROT_YAW_DEG"
 )
 
-python "$RESMIMIC_ROOT/scripts/prepare_cari4d_hoi_motion.py" "${PREP_ARGS[@]}"
+"$CARI4D_PYTHON" "$RESMIMIC_ROOT/scripts/export_cari4d_intermediate.py" "${EXPORT_ARGS[@]}"
+
+echo "[1.5/5] 用 GMR 环境将 smplx retarget 到 ResMimic human..."
+"$GMR_PYTHON" "$RESMIMIC_ROOT/scripts/retarget_smplx_to_resmimic.py" \
+  --tag "$TAG" \
+  --robot "unitree_g1" \
+  --tgt_fps 30 \
+  --resmimic_root "$RESMIMIC_ROOT" \
+  --gmr_root "$GMR_ROOT" \
+  --motion_dir "$MOTION_DIR" \
+  --pair_suffix "$PAIR_SUFFIX"
 
 ########################################
 # 2) 配对文件检查
@@ -146,10 +164,39 @@ else
 fi
 
 ########################################
-# 3) 自动同步 bike config（含 IsaacGym 载入阶段偏移）
+# 3) 比较并刚体对齐 human root
 ########################################
 
-echo "[3/5] 自动同步 bike config（仅 motion 路径；load偏移请手动改配置）..."
+echo "[3/5] 比较 pre/post GMR root motion，并对齐 human 到 object 水平面..."
+[[ -f "$PRE_HUMAN" ]] || die "缺少 pre-GMR SMPL-X 文件: $PRE_HUMAN"
+[[ -f "$HUMAN_PAIR" ]] || die "缺少 post-GMR human 文件: $HUMAN_PAIR"
+[[ -f "$OBJECT_PAIR" ]] || die "缺少 object 文件: $OBJECT_PAIR"
+
+python "$RESMIMIC_ROOT/scripts/compare_gmr_root_motion.py" \
+  --pre-human "$PRE_HUMAN" \
+  --post-human "$HUMAN_PAIR" \
+  --object "$OBJECT_PAIR"
+
+ALIGN_ARGS=()
+if [[ "$ALIGN_HUMAN_YAW_TO_OBJECT" == "1" ]]; then
+  ALIGN_ARGS+=(--align-yaw)
+fi
+python "$RESMIMIC_ROOT/scripts/align_human_root_to_object.py" \
+  --human "$HUMAN_PAIR" \
+  --object "$OBJECT_PAIR" \
+  --output "$ALIGNED_HUMAN" \
+  "${ALIGN_ARGS[@]}"
+
+python "$RESMIMIC_ROOT/scripts/compare_gmr_root_motion.py" \
+  --pre-human "$PRE_HUMAN" \
+  --post-human "$ALIGNED_HUMAN" \
+  --object "$OBJECT_PAIR"
+
+########################################
+# 4) 自动同步 bike config（含 IsaacGym 载入阶段偏移）
+########################################
+
+echo "[4/5] 自动同步 bike config（仅 motion 路径；load偏移请手动改配置）..."
 export CFG_FILE TAG PAIR_SUFFIX
 python - <<'PY'
 import os
@@ -162,7 +209,7 @@ pair = os.environ["PAIR_SUFFIX"]
 with open(cfg, "r", encoding="utf-8") as f:
     s = f.read()
 
-motion_line = f'motion_file = f"{{REPO_ROOT_DIR}}/assets/motions/{tag}_human_upright_{pair}.pkl"'
+motion_line = f'motion_file = f"{{REPO_ROOT_DIR}}/assets/motions/{tag}_human_upright_{pair}_aligned.pkl"'
 obj_line = f'object_motion_file = f"{{REPO_ROOT_DIR}}/assets/motions/{tag}_object_upright_{pair}.npz"'
 
 s = re.sub(r'^\s*motion_file\s*=\s*f"\{REPO_ROOT_DIR\}/assets/motions/.*?"\s*$', '        ' + motion_line, s, flags=re.MULTILINE)
@@ -180,10 +227,14 @@ for line in s.splitlines():
 PY
 
 ########################################
-# 4) 启动非物理可视化（便于调偏移）
+# 5) 启动非物理可视化（便于调偏移）
 ########################################
 
-echo "[4/5] 启动 nonphysics viewer（训练阶段保持关闭）..."
+echo "[5/5] 启动 nonphysics viewer（训练阶段保持关闭）..."
+PRE_HUMAN="$PRE_HUMAN" \
+POST_HUMAN="$HUMAN_PAIR" \
+OBJECT_MOTION="$OBJECT_PAIR" \
+ALIGNED_HUMAN="$ALIGNED_HUMAN" \
 OBJECT_VIEWER_SCALE="$OBJECT_VIEWER_SCALE" \
 OBJECT_MESH_MIRROR_AXIS="$OBJECT_MESH_MIRROR_AXIS" \
 OBJECT_RPY_ROLL_DEG="$OBJECT_RPY_ROLL_DEG" \
@@ -191,4 +242,5 @@ OBJECT_RPY_PITCH_DEG="$OBJECT_RPY_PITCH_DEG" \
 OBJECT_RPY_YAW_DEG="$OBJECT_RPY_YAW_DEG" \
 OBJECT_SCALE_DEBUG_CUBE="$OBJECT_SCALE_DEBUG_CUBE" \
 OBJECT_SCALE_MOTION_FALLBACK="$OBJECT_SCALE_MOTION_FALLBACK" \
+ALIGN_HUMAN_YAW_TO_OBJECT="$ALIGN_HUMAN_YAW_TO_OBJECT" \
 bash "$RESMIMIC_ROOT/run_nonphysics_chair_viewer.sh"

@@ -206,7 +206,9 @@ def main():
     import mujoco as mj
 
     # 1) Load CARI4D motion
-    data = torch.load(args.cari4d_pth, map_location="cpu")
+    # CARI4D exports store structured training-state objects, not plain tensor weights.
+    # PyTorch 2.6+ defaults torch.load(..., weights_only=True), which rejects these files.
+    data = torch.load(args.cari4d_pth, map_location="cpu", weights_only=False)
     if args.split not in data:
         raise KeyError(f"Split '{args.split}' not found in {args.cari4d_pth}; available: {list(data.keys())}")
     split_data = data[args.split]
