@@ -47,7 +47,7 @@
   </link>
 
   <joint name="RearSupportLeft" type="fixed">
-    <origin xyz="-0.2 -1 -1" rpy="0 0 1.5"/>
+    <origin xyz="-0.2 -1 -1.05" rpy="0 0 1.5"/>
     <parent link="bike_root"/>
     <child link="rear_support_left"/>
   </joint>
@@ -73,7 +73,7 @@
   </link>
 
   <joint name="RearSupportRight" type="fixed">
-    <origin xyz="0.2 -1 -1" rpy="0 0 1.5"/>
+    <origin xyz="0.2 -1 -1.05" rpy="0 0 1.5"/>
     <parent link="bike_root"/>
     <child link="rear_support_right"/>
   </joint>

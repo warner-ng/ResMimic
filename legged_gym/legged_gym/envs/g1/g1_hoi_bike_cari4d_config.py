@@ -4,13 +4,15 @@ import os
 
 REPO_ROOT_DIR = os.path.abspath(os.path.join(LEGGED_GYM_ROOT_DIR, ".."))
 
+# NOTE: 下面DAgger指的是把base_policy（GMT）继续train的加载
+# 实际写reward和domain randomization的时候，直接去上面基础cfg就好
 
 class G1HOIBikeCari4DCfg(G1HOICfg):
     class env(G1HOICfg.env):
         object_asset_root = f"{REPO_ROOT_DIR}/assets"
         object_urdf_file = "bicycle_top_tube/bikered.urdf"  # overwritten by run_cari4d_bike_resmimic.sh
         object_obj_file = "bikered.stl"  # overwritten by run_cari4d_bike_resmimic.sh
-        object_scale = 0.400  # overwritten by run_cari4d_bike_resmimic.sh
+        object_scale = 0.400
         enable_runtime_pair_leveling = False  # overwritten by run_cari4d_bike_resmimic.sh
         runtime_pair_level_target_z = 0.000  # overwritten by run_cari4d_bike_resmimic.sh
         human_root_z_bias = 0.000  # overwritten by run_cari4d_bike_resmimic.sh
@@ -36,7 +38,7 @@ class G1HOIBikeCari4DCfgDAgger(G1HOICfgDAgger):
         object_asset_root = f"{REPO_ROOT_DIR}/assets"
         object_urdf_file = "bicycle_top_tube/bikered.urdf"  # overwritten by run_cari4d_bike_resmimic.sh
         object_obj_file = "bikered.stl"  # overwritten by run_cari4d_bike_resmimic.sh
-        object_scale = 0.400  # overwritten by run_cari4d_bike_resmimic.sh
+        object_scale = 0.400
         enable_runtime_pair_leveling = False  # overwritten by run_cari4d_bike_resmimic.sh
         runtime_pair_level_target_z = 0.000  # overwritten by run_cari4d_bike_resmimic.sh
         human_root_z_bias = 0.000  # overwritten by run_cari4d_bike_resmimic.sh

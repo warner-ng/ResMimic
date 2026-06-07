@@ -85,7 +85,7 @@ HUMAN_ROOT_ROT_YAW_DEG="${HUMAN_ROOT_ROT_YAW_DEG:-0.0}"
 # ===== IsaacGym 生成高度 =====
 # 只影响 IsaacGym reset 时真实 actor 的 spawn 高度，不改 motion/ref 高度。
 HUMAN_SPAWN_Z_BIAS="${HUMAN_SPAWN_Z_BIAS:-0.0}"
-OBJECT_SPAWN_Z_BIAS="${OBJECT_SPAWN_Z_BIAS:-0.1}"
+OBJECT_SPAWN_Z_BIAS="${OBJECT_SPAWN_Z_BIAS:-0.0}"
 
 # ===== 之所以没有human 单独 xyz，是因为调了object就不用调human了 =====
 
