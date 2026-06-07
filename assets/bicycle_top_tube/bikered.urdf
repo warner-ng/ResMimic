@@ -45,4 +45,56 @@
       </geometry>
     </collision>
   </link>
+
+  <joint name="RearSupportLeft" type="fixed">
+    <origin xyz="-0.2 -1 -1" rpy="0 0 1.5"/>
+    <parent link="bike_root"/>
+    <child link="rear_support_left"/>
+  </joint>
+
+  <link name="rear_support_left">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.3"/>
+      <inertia ixx="0.002" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.002"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.4 0.02"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.4 0.02"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="RearSupportRight" type="fixed">
+    <origin xyz="0.2 -1 -1" rpy="0 0 1.5"/>
+    <parent link="bike_root"/>
+    <child link="rear_support_right"/>
+  </joint>
+
+  <link name="rear_support_right">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.3"/>
+      <inertia ixx="0.002" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.002"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.4 0.02"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.4 0.02"/>
+      </geometry>
+    </collision>
+  </link>
 </robot>

@@ -144,7 +144,7 @@ GROUNDED_OBJECT="$MOTION_DIR/${TAG}_object_upright_${PAIR_SUFFIX}_aligned_ground
 # cp -f "/home/warner/_projects/ResMimic/assets/motions/Date03_Sub01_bike_on_may_29_21_17_object.npz" \
 #       "/home/warner/_projects/ResMimic/assets/motions/Date03_Sub01_bike_on_may_29_21_17_object_upright_bikez.npz"
 
-# 0: 严格要求已有配对修正文件；1: 找不到时自动用基础文件兜底复制
+
 ALLOW_FALLBACK_PAIR="${ALLOW_FALLBACK_PAIR:-0}"  # <<< 按需改
 
 # 基础校验（避免在任意目录手敲片段时路径错位）
