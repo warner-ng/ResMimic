@@ -21,7 +21,7 @@ class G1HOIBikeCari4DCfg(G1HOICfg):
         object_root_local_rot_offset_deg = [0.0, 0.0, 0.0]
         object_motion_rot_offset_deg = [0.0, 0.0, 0.0]
         motion_global_rot_offset_deg = [-90.0, 0.0, 0.0]
-        motion_global_pos_offset = [0.000, 0.000, -3.500]
+        motion_global_pos_offset = [0.000, 0.000, 1.100]
     class motion(G1HOICfg.motion):
         motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_human_upright_bikez_aligned.pkl"
         object_motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_object_upright_bikez_aligned.npz"
@@ -47,7 +47,7 @@ class G1HOIBikeCari4DCfgDAgger(G1HOICfgDAgger):
         object_root_local_rot_offset_deg = [0.0, 0.0, 0.0]
         object_motion_rot_offset_deg = [0.0, 0.0, 0.0]
         motion_global_rot_offset_deg = [-90.0, 0.0, 0.0]
-        motion_global_pos_offset = [0.000, 0.000, -3.500]
+        motion_global_pos_offset = [0.000, 0.000, 1.100]
     class motion(G1HOICfgDAgger.motion):
         motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_human_upright_bikez_aligned.pkl"
         object_motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_object_upright_bikez_aligned.npz"
