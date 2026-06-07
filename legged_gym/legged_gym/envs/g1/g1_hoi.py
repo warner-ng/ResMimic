@@ -323,6 +323,7 @@ class G1HOI(G1MimicFuture):
         object_asset_root = self.cfg.env.object_asset_root
         object_urdf_file = self.cfg.env.object_urdf_file
         object_obj_file = self.cfg.env.object_obj_file
+        object_scale = float(getattr(self.cfg.env, "object_scale", 1.0))
         max_convex_hulls = 64
         density = self.cfg.asset.object_density
     
@@ -344,7 +345,7 @@ class G1HOI(G1MimicFuture):
         center = np.mean(obj_verts, 0)
         object_points, object_faces = trimesh.sample.sample_surface_even(mesh_obj, count=1024, seed=2024)
 
-        object_points = to_torch(object_points - center)
+        object_points = to_torch((object_points - center) * object_scale)
 
         while object_points.shape[0] < 1024:
             object_points = torch.cat([object_points, object_points[:1024 - object_points.shape[0]]], dim=0)
@@ -487,12 +488,13 @@ class G1HOI(G1MimicFuture):
             props = self.gym.get_actor_rigid_body_properties(env_handle, object_handle)
 
             self.object_handles.append(object_handle)
+            object_scale = float(getattr(self.cfg.env, "object_scale", 1.0))
             if self.cfg.domain_rand.randomize_object_scale:
                 rng_scale = self.cfg.domain_rand.object_scale_range
                 rand_scale = np.random.uniform(rng_scale[0], rng_scale[1], size=(1, ))
-                self.gym.set_actor_scale(env_handle, object_handle, rand_scale)
+                self.gym.set_actor_scale(env_handle, object_handle, rand_scale * object_scale)
             else:
-                self.gym.set_actor_scale(env_handle, object_handle, 1.0)
+                self.gym.set_actor_scale(env_handle, object_handle, object_scale)
 
             if self.num_actors == 3:
                 plate_pose = gymapi.Transform()

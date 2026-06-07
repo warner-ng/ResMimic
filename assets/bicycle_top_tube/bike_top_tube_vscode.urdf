@@ -1,5 +1,28 @@
 <?xml version="1.0" ?>
 <robot name="bike_top_tube">
+  <link name="bike_root">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.001"/>
+      <inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.03"/>
+      </geometry>
+      <material name="root_debug_sphere">
+        <color rgba="1 0 0 0.8"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="BikeRootToFrame" type="fixed">
+    <origin xyz="0.33655284 0.000000 0.11421625" rpy="0 0 0"/>
+    <parent link="bike_root"/>
+    <child link="frame"/>
+  </joint>
+
   <link name="frame">
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>

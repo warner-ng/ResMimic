@@ -17,6 +17,8 @@ import pickle
 import tempfile
 import threading
 import time
+import traceback
+import warnings
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import List, Tuple
@@ -39,6 +41,113 @@ except Exception as e:  # pragma: no cover
         "trimesh is required for runtime pair leveling mesh support.\n"
         f"Install: pip install trimesh\nImport error: {type(e).__name__}: {e}"
     )
+
+
+def _log_urdf_mesh_inventory(urdf_path: Path) -> None:
+    """Print mesh inventory and per-mesh loading status for diagnosis."""
+    print(f"[URDF-DIAG] inspecting meshes: {urdf_path}")
+    try:
+        root = ET.parse(str(urdf_path)).getroot()
+    except Exception as e:
+        print(f"[URDF-DIAG][ERROR] cannot parse URDF XML: {type(e).__name__}: {e}")
+        return
+
+    mesh_nodes = root.findall(".//mesh")
+    if not mesh_nodes:
+        print("[URDF-DIAG] no <mesh> tags found (only primitive geometries).")
+        return
+
+    base_dir = urdf_path.parent
+    for i, mesh_node in enumerate(mesh_nodes, start=1):
+        fn = mesh_node.get("filename", "")
+        if not fn:
+            print(f"[URDF-DIAG] #{i:02d} empty mesh filename")
+            continue
+        if fn.startswith("package://"):
+            print(f"[URDF-DIAG][WARN] package URI not auto-resolved by URDF parser: {fn}")
+        if fn.startswith("file://"):
+            print(f"[URDF-DIAG][WARN] file URI detected: {fn}")
+        if fn.startswith("file://"):
+            from urllib.parse import urlparse
+
+            parsed = urlparse(fn)
+            mesh_path = Path(parsed.path)
+        else:
+            mesh_path = Path(fn)
+        if not mesh_path.is_absolute():
+            mesh_path = (base_dir / mesh_path).resolve()
+        exists = mesh_path.exists()
+        scale = mesh_node.get("scale", "<none>")
+        print(f"[URDF-DIAG] #{i:02d} filename={fn} resolved={mesh_path} scale={scale} exists={exists}")
+        if not exists:
+            print(f"[URDF-DIAG][ERROR] missing mesh file: {mesh_path}")
+            continue
+        try:
+            geom = trimesh.load_mesh(str(mesh_path), force="mesh", process=False)
+            if geom.is_empty:
+                print(f"[URDF-DIAG][WARN] {mesh_path.name} loaded as empty mesh")
+            else:
+                bmin = np.asarray(geom.bounds[0]).round(4).tolist()
+                bmax = np.asarray(geom.bounds[1]).round(4).tolist()
+                print(
+                    f"[URDF-DIAG] {mesh_path.name}: verts={len(geom.vertices)} faces={len(geom.faces)} "
+                    f"bbox_min={bmin} bbox_max={bmax}"
+                )
+        except Exception as e:  # pragma: no cover
+            print(f"[URDF-DIAG][ERROR] failed to load mesh {mesh_path}: {type(e).__name__}: {e}")
+
+
+def _summarize_urdf_graph(urdf_path: Path) -> None:
+    """Print URDF link/joint counts and visual/collision geometry breakdown."""
+    try:
+        root = ET.parse(str(urdf_path)).getroot()
+    except Exception as e:
+        print(f"[URDF-DIAG][ERROR] cannot parse URDF XML for summary: {type(e).__name__}: {e}")
+        return
+
+    links = root.findall("link")
+    joints = root.findall("joint")
+    mesh_tags = root.findall(".//visual/geometry/mesh") + root.findall(".//collision/geometry/mesh")
+    primitive_tags = (
+        root.findall(".//visual/geometry/*")
+        + root.findall(".//collision/geometry/*")
+    )
+    primitive_count = len([node for node in primitive_tags if node.tag.split("}")[-1] != "mesh"])
+    unique_filenames = []
+    for mesh in root.findall(".//mesh"):
+        filename = mesh.get("filename", "")
+        if filename and filename not in unique_filenames:
+            unique_filenames.append(filename)
+    print(f"[URDF-SUM] links={len(links)} joints={len(joints)}")
+    print(f"[URDF-SUM] unique mesh refs={len(unique_filenames)} total mesh tags={len(mesh_tags)} primitive geometry tags={primitive_count}")
+
+
+def _log_urdf_object_snapshot(urdf_obj: object, tag: str) -> None:
+    n_meshes = len(getattr(urdf_obj, "_meshes", []))
+    n_joints = len(getattr(urdf_obj, "_joint_frames", []))
+    print(f"[URDF-SUM] {tag}: meshes={n_meshes} joints={n_joints}")
+    if n_meshes == 0:
+        print(f"[URDF-WARN] {tag}: no mesh geometry reported by ViserUrdf, this usually means visual geometry failed to load.")
+
+    urdf = getattr(urdf_obj, "_urdf", None)
+    if urdf is None:
+        print(f"[URDF-SUM] {tag}: _urdf object not available.")
+        return
+    try:
+        scene = getattr(urdf, "scene", None)
+        cscene = getattr(urdf, "collision_scene", None)
+        print(
+            f"[URDF-SUM] {tag}: yourdfpy scene visual={scene is not None} "
+            f"collision={cscene is not None} "
+            f"visual_nodes={len(scene.geometry) if scene is not None and getattr(scene, 'geometry', None) is not None else 0} "
+            f"collision_nodes={len(cscene.geometry) if cscene is not None and getattr(cscene, 'geometry', None) is not None else 0}"
+        )
+        errors = getattr(urdf, "errors", None)
+        if errors:
+            for err in errors:
+                print(f"[URDF-ERR] {tag}: {err}")
+    except Exception as e:  # pragma: no cover
+        print(f"[URDF-SUM][ERROR] reading yourdfpy scene info failed: {type(e).__name__}: {e}")
 
 
 def xyzw_to_wxyz(q_xyzw: np.ndarray) -> np.ndarray:
@@ -65,27 +174,80 @@ def rpy_deg_to_wxyz(roll_deg: float, pitch_deg: float, yaw_deg: float) -> np.nda
 def _build_urdf(server: viser.ViserServer, urdf_path: str, root_node_name: str):
     """Handle minor API differences across viser versions."""
     urdf_path_obj = Path(urdf_path)
+    if not urdf_path_obj.exists():
+        raise RuntimeError(f"URDF file does not exist: {urdf_path_obj}")
+    _log_urdf_mesh_inventory(urdf_path_obj)
+    _summarize_urdf_graph(urdf_path_obj)
     try:
         # Newer viser expects Path (or yourdfpy.URDF), not plain str.
-        return ViserUrdf(server, urdf_path_obj, root_node_name=root_node_name)
+        print(f"[URDF] load: {urdf_path}")
+        print(f"[URDF] root_node_name: {root_node_name}")
+        with warnings.catch_warnings(record=True) as caught_warnings:
+            warnings.simplefilter("always")
+            urdf_obj = ViserUrdf(server, urdf_path_obj, root_node_name=root_node_name)
+            for w in caught_warnings:
+                print(f"[URDF-WARN] {w.category.__name__}: {w.message}")
+        _log_urdf_object_snapshot(urdf_obj, "object")
+        print(f"[URDF] loaded. meshes={len(urdf_obj._meshes)} joints={len(urdf_obj._joint_frames)}")
+        return urdf_obj
     except TypeError:
         try:
-            return ViserUrdf(server, urdf_path_obj, root_node_name)
+            with warnings.catch_warnings(record=True) as caught_warnings:
+                warnings.simplefilter("always")
+                urdf_obj = ViserUrdf(server, urdf_path_obj, root_node_name)
+                for w in caught_warnings:
+                    print(f"[URDF-WARN] {w.category.__name__}: {w.message}")
+            _log_urdf_object_snapshot(urdf_obj, "object-alt")
+            print(f"[URDF] loaded (alt signature). meshes={len(urdf_obj._meshes)} joints={len(urdf_obj._joint_frames)}")
+            return urdf_obj
         except TypeError:
             try:
-                return ViserUrdf(server, urdf_path_obj)
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    warnings.simplefilter("always")
+                    urdf_obj = ViserUrdf(server, urdf_path_obj)
+                    for w in caught_warnings:
+                        print(f"[URDF-WARN] {w.category.__name__}: {w.message}")
+                _log_urdf_object_snapshot(urdf_obj, "object-no-root")
+                print(f"[URDF] loaded (no root_node_name). meshes={len(urdf_obj._meshes)} joints={len(urdf_obj._joint_frames)}")
+                return urdf_obj
             except AssertionError:
                 # Older/newer API mismatch: load explicit URDF object and pass it in.
                 import yourdfpy
 
                 urdf = yourdfpy.URDF.load(urdf_path_obj)
                 try:
-                    return ViserUrdf(server, urdf, root_node_name=root_node_name)
+                    with warnings.catch_warnings(record=True) as caught_warnings:
+                            warnings.simplefilter("always")
+                            urdf_obj = ViserUrdf(server, urdf, root_node_name=root_node_name)
+                            for w in caught_warnings:
+                                print(f"[URDF-WARN] {w.category.__name__}: {w.message}")
+                    _log_urdf_object_snapshot(urdf_obj, "object-via-urdf")
+                    print(f"[URDF] loaded via URDF obj. meshes={len(urdf_obj._meshes)} joints={len(urdf_obj._joint_frames)}")
+                    return urdf_obj
                 except TypeError:
                     try:
-                        return ViserUrdf(server, urdf, root_node_name)
+                        with warnings.catch_warnings(record=True) as caught_warnings:
+                            warnings.simplefilter("always")
+                            urdf_obj = ViserUrdf(server, urdf, root_node_name)
+                            for w in caught_warnings:
+                                print(f"[URDF-WARN] {w.category.__name__}: {w.message}")
+                        _log_urdf_object_snapshot(urdf_obj, "object-via-urdf-pos")
+                        print(
+                            f"[URDF] loaded via URDF obj positional. meshes={len(urdf_obj._meshes)} joints={len(urdf_obj._joint_frames)}"
+                        )
+                        return urdf_obj
                     except TypeError:
-                        return ViserUrdf(server, urdf)
+                        with warnings.catch_warnings(record=True) as caught_warnings:
+                            warnings.simplefilter("always")
+                            urdf_obj = ViserUrdf(server, urdf)
+                            for w in caught_warnings:
+                                print(f"[URDF-WARN] {w.category.__name__}: {w.message}")
+                        _log_urdf_object_snapshot(urdf_obj, "object-via-urdf-default")
+                        print(f"[URDF] loaded via URDF obj default root. meshes={len(urdf_obj._meshes)} joints={len(urdf_obj._joint_frames)}")
+                        return urdf_obj
+    except Exception as e:
+        traceback.print_exc()
+        raise RuntimeError(f"Failed to load URDF via ViserUrdf: {urdf_path_obj} ({type(e).__name__}: {e})") from e
 
 
 def build_scaled_urdf_copy(urdf_path: str, scale: float) -> str:
@@ -445,7 +607,7 @@ def main():
     )
     parser.add_argument(
         "--object-urdf",
-        default="/home/warner/_projects/ResMimic/legged_gym/assets/chairblack_cari4d/chairblack_cari4d.urdf",
+        default="/home/warner/_projects/ResMimic/assets/bicycle_top_tube/bikered.urdf",
         help="Optional object URDF path (if missing, only object frame is shown)",
     )
     parser.add_argument("--object-mesh", required=True, help="Object mesh path used for runtime pair leveling.")
@@ -458,9 +620,15 @@ def main():
     parser.add_argument("--object-root-local-rot-roll-deg", type=float, default=0.0)
     parser.add_argument("--object-root-local-rot-pitch-deg", type=float, default=0.0)
     parser.add_argument("--object-root-local-rot-yaw-deg", type=float, default=0.0)
+    parser.add_argument(
+        "--object-root-node",
+        default="/world/object_base/object_visual",
+        help="Scene node path used as root for object URDF loading.",
+    )
     parser.add_argument("--object-root-pos-offset-x", type=float, default=0.0)
     parser.add_argument("--object-root-pos-offset-y", type=float, default=0.0)
     parser.add_argument("--object-root-pos-offset-z", type=float, default=0.0)
+    parser.add_argument("--object-mesh-scale", type=float, default=1.0, help="Scale object mesh and URDF mesh scale at runtime")
     parser.add_argument("--enable-runtime-pair-leveling", action="store_true")
     parser.add_argument("--runtime-pair-level-target-z", type=float, default=0.0)
     parser.add_argument("--human-root-z-bias", type=float, default=0.05)
@@ -481,6 +649,7 @@ def main():
         raise ValueError("No ankle/toe/foot links found in human motion for runtime pair leveling.")
     mesh = trimesh.load(args.object_mesh, force="mesh", process=False)
     object_points = np.asarray(mesh.vertices, dtype=np.float64)
+    object_points = object_points * float(args.object_mesh_scale)
     object_points = object_points - object_points.mean(axis=0, keepdims=True)
 
     root_rot_xyzw = apply_root_rot_offset_xyzw(
@@ -543,7 +712,12 @@ def main():
     object_urdf = None
     object_urdf_path = Path(args.object_urdf)
     if object_urdf_path.exists():
-        object_urdf = _build_urdf(server, str(object_urdf_path), root_node_name="/world/object_base/object_visual/object")
+        if abs(float(args.object_mesh_scale) - 1.0) > 1e-8:
+            scaled_object_urdf_path = build_scaled_urdf_copy(str(object_urdf_path), float(args.object_mesh_scale))
+            print(f"[INFO] using scaled object URDF copy: {scaled_object_urdf_path}")
+            object_urdf = _build_urdf(server, str(scaled_object_urdf_path), root_node_name=args.object_root_node)
+        else:
+            object_urdf = _build_urdf(server, str(object_urdf_path), root_node_name=args.object_root_node)
     else:
         print(f"[WARN] object urdf not found, showing only object frame: {object_urdf_path}")
 
@@ -584,6 +758,7 @@ def main():
         f"[INFO] runtime_pair_leveling={'on' if args.enable_runtime_pair_leveling else 'off'}, "
         f"target_z={args.runtime_pair_level_target_z:.3f}"
     )
+    print(f"[INFO] object_mesh_scale={args.object_mesh_scale:.3f}")
     print(f"[INFO] root_z_bias(human, object)=({args.human_root_z_bias:.3f}, {args.object_root_z_bias:.3f})")
 
     try:

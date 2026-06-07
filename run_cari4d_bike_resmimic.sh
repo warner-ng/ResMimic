@@ -59,6 +59,9 @@ OBJECT_ROOT_POS_OFFSET_Z="${OBJECT_ROOT_POS_OFFSET_Z:--0.8}"
 OBJECT_ROOT_ROT_ROLL_DEG="${OBJECT_ROOT_ROT_ROLL_DEG:--90.0}"
 OBJECT_ROOT_ROT_PITCH_DEG="${OBJECT_ROOT_ROT_PITCH_DEG:-0.0}"
 OBJECT_ROOT_ROT_YAW_DEG="${OBJECT_ROOT_ROT_YAW_DEG:-0.0}"
+OBJECT_ROOT_LOCAL_ROT_ROLL_DEG="${OBJECT_ROOT_LOCAL_ROT_ROLL_DEG:-0.0}"
+OBJECT_ROOT_LOCAL_ROT_PITCH_DEG="${OBJECT_ROOT_LOCAL_ROT_PITCH_DEG:-0.0}"
+OBJECT_ROOT_LOCAL_ROT_YAW_DEG="${OBJECT_ROOT_LOCAL_ROT_YAW_DEG:-0.0}"
 
 # LOCAL_ROT 是物体局部坐标系旋转，右乘：q = q_motion * q_offset。
 # 先注释掉，后续确认是否需要再放开。
@@ -97,7 +100,17 @@ HUMAN_BASE="$MOTION_DIR/${TAG}_human.pkl"
 OBJECT_BASE="$MOTION_DIR/${TAG}_object.npz"
 HUMAN_PAIR="$MOTION_DIR/${TAG}_human_upright_${PAIR_SUFFIX}.pkl"
 OBJECT_PAIR="$MOTION_DIR/${TAG}_object_upright_${PAIR_SUFFIX}.npz"
-OBJECT_MESH="$RESMIMIC_ROOT/assets/hy3d_bike_cari4d/Date03_Sub01_bike_wild001_000_align_centered_x20.obj"
+OBJECT_MESH="$RESMIMIC_ROOT/assets/bikered.stl"
+OBJECT_URDF="$RESMIMIC_ROOT/assets/bicycle_top_tube/bikered.urdf"
+OBJECT_URDF_OVERRIDE_REL="${OBJECT_URDF_OVERRIDE_REL:-bicycle_top_tube/bikered.urdf}"
+OBJECT_OBJ_OVERRIDE_REL="${OBJECT_OBJ_OVERRIDE_REL:-bikered.stl}"
+case "$OBJECT_URDF_OVERRIDE_REL" in
+  assets/*) OBJECT_URDF_OVERRIDE_REL="${OBJECT_URDF_OVERRIDE_REL#assets/}" ;;
+esac
+case "$OBJECT_OBJ_OVERRIDE_REL" in
+  assets/*) OBJECT_OBJ_OVERRIDE_REL="${OBJECT_OBJ_OVERRIDE_REL#assets/}" ;;
+esac
+OBJECT_SCALE="${OBJECT_SCALE:-0.1}"  # 统一缩放系数：同时作用于 IsaacGym 与 viser
 PRE_HUMAN="$MOTION_DIR/${TAG}_smplx_input.npz"
 ALIGNED_HUMAN="$MOTION_DIR/${TAG}_human_upright_${PAIR_SUFFIX}_aligned.pkl"
 ALIGNED_OBJECT="$MOTION_DIR/${TAG}_object_upright_${PAIR_SUFFIX}_aligned.npz"
@@ -148,6 +161,42 @@ if [[ -n "$ACTIVE_PY_PREFIX" && -d "$ACTIVE_PY_PREFIX/lib" ]]; then
   export LD_LIBRARY_PATH="$ACTIVE_PY_PREFIX/lib:${LD_LIBRARY_PATH:-}"
 fi
 export PYTHONPATH="$RESMIMIC_ROOT/legged_gym:${PYTHONPATH:-}"
+
+free_tcp_port() {
+  local port="$1"
+  local pids=""
+
+  if command -v lsof >/dev/null 2>&1; then
+    pids="$(lsof -t -iTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+  elif command -v ss >/dev/null 2>&1; then
+    pids="$(ss -ltnp "sport = :$port" 2>/dev/null | awk 'NR>1 { if ($NF ~ /pid=/) { match($NF, /pid=([0-9]+)/, a); if (a[1] != "") print a[1] } }')"
+  fi
+
+  if [[ -n "$pids" ]]; then
+    echo "[WARN] 端口 $port 被占用，PID(s): $(echo "$pids" | tr '\n' ' ')，先清理..."
+    echo "$pids" | xargs -r kill -15 || true
+    sleep 1
+    if command -v lsof >/dev/null 2>&1; then
+      pids="$(lsof -t -iTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+    elif command -v ss >/dev/null 2>&1; then
+      pids="$(ss -ltnp "sport = :$port" 2>/dev/null | awk 'NR>1 { if ($NF ~ /pid=/) { match($NF, /pid=([0-9]+)/, a); if (a[1] != "") print a[1] } }')"
+    fi
+    if [[ -n "$pids" ]]; then
+      echo "[WARN] 仍未释放端口 $port，执行强制清理。"
+      echo "$pids" | xargs -r kill -9 || true
+      sleep 1
+    fi
+  fi
+
+  if command -v lsof >/dev/null 2>&1; then
+    pids="$(lsof -t -iTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+  elif command -v ss >/dev/null 2>&1; then
+    pids="$(ss -ltnp "sport = :$port" 2>/dev/null | awk 'NR>1 { if ($NF ~ /pid=/) { match($NF, /pid=([0-9]+)/, a); if (a[1] != "") print a[1] } }')"
+  fi
+  if [[ -n "$pids" ]]; then
+    die "端口 $port 仍有监听进程(PID: $(echo "$pids" | tr '\n' ' '))，请手动释放后重试。"
+  fi
+}
 
 echo "[1/5] 用 CARI4D 环境从 pth 导出 smplx/object..."
 EXPORT_ARGS=(
@@ -239,11 +288,23 @@ cp -f "$OBJECT_PAIR" "$ALIGNED_OBJECT"
 #   --stat first
 
 ########################################
+# 3.5) 同步 object 缩放（IsaacGym + viser）
+########################################
+
+if [[ "${OBJECT_SCALE}" != "1.0" ]]; then
+  echo "[3.5/5] OBJECT_SCALE=${OBJECT_SCALE}，将统一传递到 IsaacGym 与 viser（不改写 mesh/urdf 文件）。"
+else
+  echo "[3.5/5] OBJECT_SCALE=1.0，使用原始文件与原始尺寸。"
+fi
+
+########################################
 # 4) 自动同步 bike config（含 IsaacGym 载入阶段偏移）
 ########################################
 
 echo "[4/6] 自动同步 bike config（motion 路径 + root rotation offsets）..."
 export CFG_FILE TAG PAIR_SUFFIX
+export OBJECT_SCALE
+export OBJECT_URDF_OVERRIDE_REL OBJECT_OBJ_OVERRIDE_REL
 export HUMAN_ROOT_ROT_ROLL_DEG HUMAN_ROOT_ROT_PITCH_DEG HUMAN_ROOT_ROT_YAW_DEG
 export OBJECT_ROOT_ROT_ROLL_DEG OBJECT_ROOT_ROT_PITCH_DEG OBJECT_ROOT_ROT_YAW_DEG
 # LOCAL_ROT 保留注释（如有需要再手动放开）
@@ -261,6 +322,8 @@ pair = os.environ["PAIR_SUFFIX"]
 human_root_rot = f'[{float(os.environ["HUMAN_ROOT_ROT_ROLL_DEG"]):.1f}, {float(os.environ["HUMAN_ROOT_ROT_PITCH_DEG"]):.1f}, {float(os.environ["HUMAN_ROOT_ROT_YAW_DEG"]):.1f}]'
 object_root_rot = f'[{float(os.environ["OBJECT_ROOT_ROT_ROLL_DEG"]):.1f}, {float(os.environ["OBJECT_ROOT_ROT_PITCH_DEG"]):.1f}, {float(os.environ["OBJECT_ROOT_ROT_YAW_DEG"]):.1f}]'
 object_root_pos_offset = f'[{float(os.environ["OBJECT_ROOT_POS_OFFSET_X"]):.3f}, {float(os.environ["OBJECT_ROOT_POS_OFFSET_Y"]):.3f}, {float(os.environ["OBJECT_ROOT_POS_OFFSET_Z"]):.3f}]'
+object_urdf_file = os.environ["OBJECT_URDF_OVERRIDE_REL"]
+object_obj_file = os.environ["OBJECT_OBJ_OVERRIDE_REL"]
 enable_pair_leveling = "True" if os.environ["ENABLE_RUNTIME_PAIR_LEVELING"] == "1" else "False"
 pair_level_target_z = float(os.environ["RUNTIME_PAIR_LEVEL_TARGET_Z"])
 human_root_z_bias = float(os.environ["HUMAN_ROOT_Z_BIAS"])
@@ -271,6 +334,7 @@ with open(cfg, "r", encoding="utf-8") as f:
 
 motion_line = f'motion_file = f"{{REPO_ROOT_DIR}}/assets/motions/{tag}_human_upright_{pair}_aligned.pkl"'
 obj_line = f'object_motion_file = f"{{REPO_ROOT_DIR}}/assets/motions/{tag}_object_upright_{pair}_aligned.npz"'
+object_scale = float(os.environ["OBJECT_SCALE"])
 
 s = re.sub(r'^\s*motion_file\s*=\s*f"\{REPO_ROOT_DIR\}/assets/motions/.*?"\s*$', '        ' + motion_line, s, flags=re.MULTILINE)
 s = re.sub(r'^\s*object_motion_file\s*=\s*f"\{REPO_ROOT_DIR\}/assets/motions/.*?"\s*$', '        ' + obj_line, s, flags=re.MULTILINE)
@@ -279,6 +343,16 @@ s = re.sub(r'^\s*runtime_pair_level_target_z\s*=\s*[-0-9.]+\s*$', f'        runt
 s = re.sub(r'^\s*human_root_z_bias\s*=\s*[-0-9.]+\s*$', f'        human_root_z_bias = {human_root_z_bias:.3f}', s, flags=re.MULTILINE)
 s = re.sub(r'^\s*object_root_z_bias\s*=\s*[-0-9.]+\s*$', f'        object_root_z_bias = {object_root_z_bias:.3f}', s, flags=re.MULTILINE)
 s = re.sub(r'^\s*object_root_pos_offset\s*=\s*\[.*?\]\s*$', '        object_root_pos_offset = ' + object_root_pos_offset, s, flags=re.MULTILINE)
+s = re.sub(r'^\s*object_urdf_file\s*=\s*".*?"\s*$', '        object_urdf_file = "' + object_urdf_file + '"', s, flags=re.MULTILINE)
+s = re.sub(r'^\s*object_obj_file\s*=\s*".*?"\s*$', '        object_obj_file = "' + object_obj_file + '"', s, flags=re.MULTILINE)
+if re.search(r'^\s*object_scale\s*=.*$', s, flags=re.MULTILINE):
+    s = re.sub(r'^\s*object_scale\s*=\s*.*?\s*$', f'        object_scale = {object_scale:.3f}', s, flags=re.MULTILINE)
+else:
+    s = s.replace(
+        f'        object_obj_file = "{object_obj_file}"',
+        f'        object_obj_file = "{object_obj_file}"\n        object_scale = {object_scale:.3f}',
+        1
+    )
 s = re.sub(r'^\s*human_root_rot_offset_deg\s*=\s*\[.*?\]\s*$', '        human_root_rot_offset_deg = ' + human_root_rot, s, flags=re.MULTILINE)
 s = re.sub(r'^\s*object_root_rot_offset_deg\s*=\s*\[.*?\]\s*$', '        object_root_rot_offset_deg = ' + object_root_rot, s, flags=re.MULTILINE)
 # LOCAL_ROT 本次不再从脚本注入配置（避免 unset 导致的 KeyError），如需再启用请放开上方逻辑并手动复用以下行：
@@ -295,24 +369,29 @@ PY
 # 5) 启动非物理可视化
 ########################################
 
+free_tcp_port 8080
+
 echo "[5/6] 启动 nonphysics viewer..."
 PRE_HUMAN="$PRE_HUMAN" \
 POST_HUMAN="$ALIGNED_HUMAN" \
 OBJECT_MOTION="$ALIGNED_OBJECT" \
 ALIGNED_HUMAN="$ALIGNED_HUMAN" \
 ALIGN_HUMAN_YAW_TO_OBJECT="$ALIGN_HUMAN_YAW_TO_OBJECT" \
+OBJECT_SCALE="$OBJECT_SCALE" \
 HUMAN_ROOT_ROT_ROLL_DEG="$HUMAN_ROOT_ROT_ROLL_DEG" \
 HUMAN_ROOT_ROT_PITCH_DEG="$HUMAN_ROOT_ROT_PITCH_DEG" \
 HUMAN_ROOT_ROT_YAW_DEG="$HUMAN_ROOT_ROT_YAW_DEG" \
 OBJECT_ROOT_ROT_ROLL_DEG="$OBJECT_ROOT_ROT_ROLL_DEG" \
 OBJECT_ROOT_ROT_PITCH_DEG="$OBJECT_ROOT_ROT_PITCH_DEG" \
 OBJECT_ROOT_ROT_YAW_DEG="$OBJECT_ROOT_ROT_YAW_DEG" \
-# OBJECT_ROOT_LOCAL_ROT_ROLL_DEG="$OBJECT_ROOT_LOCAL_ROT_ROLL_DEG" \
-# OBJECT_ROOT_LOCAL_ROT_PITCH_DEG="$OBJECT_ROOT_LOCAL_ROT_PITCH_DEG" \
-# OBJECT_ROOT_LOCAL_ROT_YAW_DEG="$OBJECT_ROOT_LOCAL_ROT_YAW_DEG" \
+OBJECT_ROOT_LOCAL_ROT_ROLL_DEG="$OBJECT_ROOT_LOCAL_ROT_ROLL_DEG" \
+OBJECT_ROOT_LOCAL_ROT_PITCH_DEG="$OBJECT_ROOT_LOCAL_ROT_PITCH_DEG" \
+OBJECT_ROOT_LOCAL_ROT_YAW_DEG="$OBJECT_ROOT_LOCAL_ROT_YAW_DEG" \
 OBJECT_ROOT_POS_OFFSET_X="$OBJECT_ROOT_POS_OFFSET_X" \
 OBJECT_ROOT_POS_OFFSET_Y="$OBJECT_ROOT_POS_OFFSET_Y" \
 OBJECT_ROOT_POS_OFFSET_Z="$OBJECT_ROOT_POS_OFFSET_Z" \
+OBJECT_URDF="$OBJECT_URDF" \
+OBJECT_MESH="$OBJECT_MESH" \
 ENABLE_RUNTIME_PAIR_LEVELING="$ENABLE_RUNTIME_PAIR_LEVELING" \
 RUNTIME_PAIR_LEVEL_TARGET_Z="$RUNTIME_PAIR_LEVEL_TARGET_Z" \
 HUMAN_ROOT_Z_BIAS="$HUMAN_ROOT_Z_BIAS" \

@@ -8,8 +8,9 @@ REPO_ROOT_DIR = os.path.abspath(os.path.join(LEGGED_GYM_ROOT_DIR, ".."))
 class G1HOIBikeCari4DCfg(G1HOICfg):
     class env(G1HOICfg.env):
         object_asset_root = f"{REPO_ROOT_DIR}/assets"
-        object_urdf_file = "hy3d_bike_cari4d/hy3d_bike_cari4d.urdf"
-        object_obj_file = "hy3d_bike_cari4d/Date03_Sub01_bike_wild001_000_align_centered_x20.obj"
+        object_urdf_file = "bicycle_top_tube/bikered.urdf"
+        object_obj_file = "bikered.stl"
+        object_scale = 0.100
         enable_runtime_pair_leveling = True
         runtime_pair_level_target_z = 0.000
         human_root_z_bias = 0.050
@@ -33,8 +34,9 @@ class G1HOIBikeCari4DCfg(G1HOICfg):
 class G1HOIBikeCari4DCfgDAgger(G1HOICfgDAgger):
     class env(G1HOICfgDAgger.env):
         object_asset_root = f"{REPO_ROOT_DIR}/assets"
-        object_urdf_file = "hy3d_bike_cari4d/hy3d_bike_cari4d.urdf"
-        object_obj_file = "hy3d_bike_cari4d/Date03_Sub01_bike_wild001_000_align_centered_x20.obj"
+        object_urdf_file = "bicycle_top_tube/bikered.urdf"
+        object_obj_file = "bikered.stl"
+        object_scale = 0.100
         enable_runtime_pair_leveling = True
         runtime_pair_level_target_z = 0.000
         human_root_z_bias = 0.050
