@@ -319,17 +319,25 @@ def quat_mul_xyzw(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
     )
 
 
+def root_rot_offset_quat_xyzw(offset_deg: Tuple[float, float, float]) -> np.ndarray:
+    roll_deg, pitch_deg, yaw_deg = offset_deg
+    qx = R.from_rotvec(np.deg2rad(roll_deg) * np.array([1.0, 0.0, 0.0])).as_quat()
+    qy = R.from_rotvec(np.deg2rad(pitch_deg) * np.array([0.0, 1.0, 0.0])).as_quat()
+    qz = R.from_rotvec(np.deg2rad(yaw_deg) * np.array([0.0, 0.0, 1.0])).as_quat()
+    return quat_mul_xyzw(qx, quat_mul_xyzw(qy, qz))
+
+
 def apply_root_rot_offset_xyzw(root_rot_xyzw: np.ndarray, offset_deg: Tuple[float, float, float]) -> np.ndarray:
     if np.allclose(np.asarray(offset_deg, dtype=np.float64), 0.0):
         return root_rot_xyzw.copy()
-    offset_q = R.from_euler("xyz", offset_deg, degrees=True).as_quat()
+    offset_q = root_rot_offset_quat_xyzw(offset_deg)
     return np.stack([quat_mul_xyzw(offset_q, q) for q in root_rot_xyzw], axis=0)
 
 
 def apply_root_local_rot_offset_xyzw(root_rot_xyzw: np.ndarray, offset_deg: Tuple[float, float, float]) -> np.ndarray:
     if np.allclose(np.asarray(offset_deg, dtype=np.float64), 0.0):
         return root_rot_xyzw.copy()
-    offset_q = R.from_euler("xyz", offset_deg, degrees=True).as_quat()
+    offset_q = root_rot_offset_quat_xyzw(offset_deg)
     return np.stack([quat_mul_xyzw(q, offset_q) for q in root_rot_xyzw], axis=0)
 
 
@@ -635,6 +643,13 @@ def main():
     parser.add_argument("--object-root-z-bias", type=float, default=0.03)
     parser.add_argument("--host", default="0.0.0.0", help="Viser host")
     parser.add_argument("--port", type=int, default=8080, help="Viser port")
+    parser.add_argument("--show-ground", action="store_true", help="Enable ground grid rendering in viser.")
+    parser.add_argument("--ground-size", type=float, default=8.0, help="Ground grid size (meters).")
+    parser.add_argument("--ground-cell-size", type=float, default=0.5, help="Ground grid cell size (meters).")
+    parser.add_argument("--ground-plane-z", type=float, default=0.0, help="Ground grid plane height (z offset).")
+    parser.add_argument("--pair-root-pos-offset-x", type=float, default=0.0, help="Pair-level translation offset x for both human/object.")
+    parser.add_argument("--pair-root-pos-offset-y", type=float, default=0.0, help="Pair-level translation offset y for both human/object.")
+    parser.add_argument("--pair-root-pos-offset-z", type=float, default=0.0, help="Pair-level translation offset z for both human/object.")
     parser.add_argument("--fps", type=int, default=0, help="Override playback FPS (0 means use file fps)")
     args = parser.parse_args()
 
@@ -668,10 +683,17 @@ def main():
             args.object_root_local_rot_yaw_deg,
         ),
     )
-    obj_pos = obj_pos + np.array(
+    object_local_pos_offset = np.array(
         [args.object_root_pos_offset_x, args.object_root_pos_offset_y, args.object_root_pos_offset_z],
         dtype=np.float64,
-    )[None, :]
+    )
+    obj_pos = obj_pos + R.from_quat(obj_rot_xyzw).apply(object_local_pos_offset)
+    pair_trans = np.array(
+        [args.pair_root_pos_offset_x, args.pair_root_pos_offset_y, args.pair_root_pos_offset_z],
+        dtype=np.float64,
+    )
+    root_pos = root_pos + pair_trans[None, :]
+    obj_pos = obj_pos + pair_trans[None, :]
     if args.enable_runtime_pair_leveling:
         level_rot_xyzw, level_trans = compute_pair_level_transform(
             root_pos,
@@ -703,6 +725,21 @@ def main():
 
     world = server.scene.add_frame("/world", wxyz=np.array([1.0, 0.0, 0.0, 0.0]), position=np.zeros(3))
     _ = world  # keep handle referenced
+
+    if args.show_ground:
+        server.scene.add_grid(
+            "/world/ground",
+            width=args.ground_size,
+            height=args.ground_size,
+            plane="xy",
+            cell_color=(180, 180, 180),
+            section_color=(120, 120, 120),
+            cell_size=args.ground_cell_size,
+            section_size=max(args.ground_cell_size, 1.0),
+            position=(0.0, 0.0, args.ground_plane_z),
+            plane_opacity=0.15,
+            plane_color=(220, 220, 220),
+        )
 
     robot_base = server.scene.add_frame("/world/robot_base")
     robot = _build_urdf(server, args.robot_urdf, root_node_name="/world/robot_base/robot")
@@ -758,8 +795,16 @@ def main():
         f"[INFO] runtime_pair_leveling={'on' if args.enable_runtime_pair_leveling else 'off'}, "
         f"target_z={args.runtime_pair_level_target_z:.3f}"
     )
+    print(
+        f"[INFO] pair_root_pos_offset=({args.pair_root_pos_offset_x:.3f}, "
+        f"{args.pair_root_pos_offset_y:.3f}, {args.pair_root_pos_offset_z:.3f})"
+    )
     print(f"[INFO] object_mesh_scale={args.object_mesh_scale:.3f}")
     print(f"[INFO] root_z_bias(human, object)=({args.human_root_z_bias:.3f}, {args.object_root_z_bias:.3f})")
+    print(
+        f"[INFO] ground_show={args.show_ground}, ground_size={args.ground_size:.3f}, "
+        f"ground_cell_size={args.ground_cell_size:.3f}, ground_plane_z={args.ground_plane_z:.3f}"
+    )
 
     try:
         while True:

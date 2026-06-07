@@ -119,30 +119,46 @@ class G1HOI(G1MimicFuture):
     def _apply_root_rot_offset(self, root_rot, offset_deg):
         if all(abs(v) < 1e-8 for v in offset_deg):
             return root_rot
-        offset = torch.tensor(offset_deg, device=root_rot.device, dtype=root_rot.dtype) * (torch.pi / 180.0)
-        offset_quat = quat_from_euler_xyz(
-            torch.full_like(root_rot[:, 0], offset[0]),
-            torch.full_like(root_rot[:, 1], offset[1]),
-            torch.full_like(root_rot[:, 2], offset[2]),
-        )
+        offset_quat = self._root_rot_offset_quat(root_rot, offset_deg)
         return quat_mul(offset_quat, root_rot)
 
     def _apply_root_local_rot_offset(self, root_rot, offset_deg):
         if all(abs(v) < 1e-8 for v in offset_deg):
             return root_rot
-        offset = torch.tensor(offset_deg, device=root_rot.device, dtype=root_rot.dtype) * (torch.pi / 180.0)
-        offset_quat = quat_from_euler_xyz(
-            torch.full_like(root_rot[:, 0], offset[0]),
-            torch.full_like(root_rot[:, 1], offset[1]),
-            torch.full_like(root_rot[:, 2], offset[2]),
-        )
+        offset_quat = self._root_rot_offset_quat(root_rot, offset_deg)
         return quat_mul(root_rot, offset_quat)
 
-    def _apply_object_root_pos_offset(self, object_root_pos):
+    def _root_rot_offset_quat(self, root_rot, offset_deg):
+        offset = torch.tensor(offset_deg, device=root_rot.device, dtype=root_rot.dtype) * (torch.pi / 180.0)
+        n = root_rot.shape[0]
+        axes = torch.eye(3, device=root_rot.device, dtype=root_rot.dtype)
+        qx = torch_utils.quat_from_angle_axis(
+            torch.full((n,), offset[0], device=root_rot.device, dtype=root_rot.dtype),
+            axes[0].expand(n, -1),
+        )
+        qy = torch_utils.quat_from_angle_axis(
+            torch.full((n,), offset[1], device=root_rot.device, dtype=root_rot.dtype),
+            axes[1].expand(n, -1),
+        )
+        qz = torch_utils.quat_from_angle_axis(
+            torch.full((n,), offset[2], device=root_rot.device, dtype=root_rot.dtype),
+            axes[2].expand(n, -1),
+        )
+        return quat_mul(qx, quat_mul(qy, qz))
+
+    def _apply_object_root_pos_offset(self, object_root_pos, object_root_rot):
         offset = getattr(self.cfg.env, "object_root_pos_offset", [0.0, 0.0, 0.0])
         if all(abs(v) < 1e-8 for v in offset):
             return object_root_pos
-        return object_root_pos + torch.tensor(offset, device=object_root_pos.device, dtype=object_root_pos.dtype).unsqueeze(0)
+        local_offset = torch.tensor(offset, device=object_root_pos.device, dtype=object_root_pos.dtype).unsqueeze(0)
+        return object_root_pos + quat_rotate(object_root_rot, local_offset.expand(object_root_pos.shape[0], -1))
+
+    def _apply_pair_root_pos_offset(self, root_pos, object_root_pos):
+        offset = getattr(self.cfg.env, "motion_global_pos_offset", [0.0, 0.0, 0.0])
+        if all(abs(v) < 1e-8 for v in offset):
+            return root_pos, object_root_pos
+        trans = torch.tensor(offset, device=root_pos.device, dtype=root_pos.dtype).unsqueeze(0)
+        return root_pos + trans, object_root_pos + trans
 
     def _reset_ref_motion(self, env_ids, motion_ids=None):
         n = len(env_ids)
@@ -159,8 +175,9 @@ class G1HOI(G1MimicFuture):
         
         root_pos, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, body_pos, root_pos_delta_local, root_rot_delta_local, object_root_pos, object_root_rot = self._motion_lib.calc_hoi_motion_frame(motion_ids, motion_times)
         root_rot = self._apply_human_root_rot_offset(root_rot)
-        object_root_pos = self._apply_object_root_pos_offset(object_root_pos)
         object_root_rot = self._apply_object_root_rot_offset(object_root_rot)
+        object_root_pos = self._apply_object_root_pos_offset(object_root_pos, object_root_rot)
+        root_pos, object_root_pos = self._apply_pair_root_pos_offset(root_pos, object_root_pos)
         pair_rot, pair_trans = self._compute_runtime_pair_level_transform(root_pos, root_rot, body_pos, object_root_pos, object_root_rot)
         self._pair_level_rot[env_ids] = pair_rot
         self._pair_level_trans[env_ids] = pair_trans
@@ -196,8 +213,9 @@ class G1HOI(G1MimicFuture):
         motion_times = self._get_motion_times()
         root_pos, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, body_pos, root_pos_delta_local, root_rot_delta_local, object_root_pos, object_root_rot = self._motion_lib.calc_hoi_motion_frame(motion_ids, motion_times)
         root_rot = self._apply_human_root_rot_offset(root_rot)
-        object_root_pos = self._apply_object_root_pos_offset(object_root_pos)
         object_root_rot = self._apply_object_root_rot_offset(object_root_rot)
+        object_root_pos = self._apply_object_root_pos_offset(object_root_pos, object_root_rot)
+        root_pos, object_root_pos = self._apply_pair_root_pos_offset(root_pos, object_root_pos)
         env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
         root_pos, root_rot, object_root_pos, object_root_rot = self._apply_runtime_pair_level_transform(env_ids, root_pos, root_rot, object_root_pos, object_root_rot)
         root_pos[:, 2] += self.cfg.motion.height_offset

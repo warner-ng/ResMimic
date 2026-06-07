@@ -80,20 +80,20 @@ def fit_global_yaw_deg(human_root_pos: np.ndarray, object_root_pos: np.ndarray) 
 def apply_global_rigid_transform(
     human_root_pos: np.ndarray,
     human_root_rot_xyzw: np.ndarray,
-    yaw_deg: float,
+    rpy_deg: np.ndarray,
     translation_xy: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    yaw_rot = R.from_euler("z", yaw_deg, degrees=True)
+    rpy_rot = R.from_euler("xyz", rpy_deg, degrees=True)
 
     out_pos = human_root_pos.copy()
     out_rot = human_root_rot_xyzw.copy()
 
-    out_pos = yaw_rot.apply(out_pos)
+    out_pos = rpy_rot.apply(out_pos)
     out_pos[:, 0] += float(translation_xy[0])
     out_pos[:, 1] += float(translation_xy[1])
 
     root_rot = R.from_quat(out_rot)
-    out_rot = (yaw_rot * root_rot).as_quat()
+    out_rot = (rpy_rot * root_rot).as_quat()
     return out_pos, out_rot
 
 
@@ -113,6 +113,20 @@ def main() -> None:
         action="store_true",
         help="Estimate and apply one global yaw rotation before solving translation.",
     )
+    parser.add_argument(
+        "--manual-rpy-deg",
+        nargs=3,
+        type=float,
+        default=[0.0, 0.0, 0.0],
+        metavar=("ROLL", "PITCH", "YAW"),
+        help="Apply a fixed global RPY rotation (degrees) before translation fitting. Order: roll pitch yaw.",
+    )
+    parser.add_argument(
+        "--manual-yaw-deg",
+        type=float,
+        default=0.0,
+        help="Apply a fixed global yaw (degrees) before translation fitting. Default 0.0.",
+    )
     parser.add_argument("--quiet", action="store_true", help="Only print minimal summary lines.")
     args = parser.parse_args()
 
@@ -126,20 +140,32 @@ def main() -> None:
     before_mean, before_p95, before_max = summarize_xy_distance(human_root_pos, object_root_pos)
 
     yaw_deg = 0.0
+    rpy_deg = np.asarray(args.manual_rpy_deg, dtype=np.float64)
     if args.align_yaw:
         yaw_deg = fit_global_yaw_deg(human_root_pos, object_root_pos)
+        rpy_deg = np.array([0.0, 0.0, yaw_deg], dtype=np.float64)
+    else:
+        rpy_deg = np.array(args.manual_rpy_deg, dtype=np.float64)
+        if np.linalg.norm(rpy_deg) < 1e-12 and abs(args.manual_yaw_deg) > 1e-8:
+            rpy_deg[2] = float(args.manual_yaw_deg)
+
+    # keep old flag semantics in a compatibility-compatible way:
+    # if user only sets manual-yaw then keep it in the same effect.
+    if args.align_yaw:
+        # already handled above
+        pass
 
     rotated_pos, rotated_rot = apply_global_rigid_transform(
         human_root_pos=human_root_pos,
         human_root_rot_xyzw=human_root_rot,
-        yaw_deg=yaw_deg,
+        rpy_deg=rpy_deg,
         translation_xy=np.zeros(2, dtype=np.float64),
     )
     translation_xy = fit_global_xy_translation(rotated_pos, object_root_pos)
     aligned_pos, aligned_rot = apply_global_rigid_transform(
         human_root_pos=human_root_pos,
         human_root_rot_xyzw=human_root_rot,
-        yaw_deg=yaw_deg,
+        rpy_deg=rpy_deg,
         translation_xy=translation_xy,
     )
 
@@ -163,7 +189,7 @@ def main() -> None:
     print(f"Reference object: {args.object}")
     print(f"Output human: {args.output}")
     print(f"Frames used: {aligned_pos.shape[0]}")
-    print(f"Applied yaw deg: {yaw_deg:.6f}")
+    print(f"Applied rpy deg: [{rpy_deg[0]:.6f}, {rpy_deg[1]:.6f}, {rpy_deg[2]:.6f}]")
     print(f"Applied translation xy: [{translation_xy[0]:.6f}, {translation_xy[1]:.6f}]")
     print(
         f"XY distance before: mean={before_mean:.6f}, p95={before_p95:.6f}, max={before_max:.6f}"
