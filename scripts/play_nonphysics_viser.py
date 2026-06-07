@@ -650,6 +650,9 @@ def main():
     parser.add_argument("--pair-root-pos-offset-x", type=float, default=0.0, help="Pair-level translation offset x for both human/object.")
     parser.add_argument("--pair-root-pos-offset-y", type=float, default=0.0, help="Pair-level translation offset y for both human/object.")
     parser.add_argument("--pair-root-pos-offset-z", type=float, default=0.0, help="Pair-level translation offset z for both human/object.")
+    parser.add_argument("--pair-root-rot-roll-deg", type=float, default=0.0, help="Pair-level world roll rotation for both human/object.")
+    parser.add_argument("--pair-root-rot-pitch-deg", type=float, default=0.0, help="Pair-level world pitch rotation for both human/object.")
+    parser.add_argument("--pair-root-rot-yaw-deg", type=float, default=0.0, help="Pair-level world yaw rotation for both human/object.")
     parser.add_argument("--fps", type=int, default=0, help="Override playback FPS (0 means use file fps)")
     args = parser.parse_args()
 
@@ -688,6 +691,18 @@ def main():
         dtype=np.float64,
     )
     obj_pos = obj_pos + R.from_quat(obj_rot_xyzw).apply(object_local_pos_offset)
+    pair_rot_offset = (
+        args.pair_root_rot_roll_deg,
+        args.pair_root_rot_pitch_deg,
+        args.pair_root_rot_yaw_deg,
+    )
+    if not np.allclose(np.asarray(pair_rot_offset, dtype=np.float64), 0.0):
+        pair_rot_q = root_rot_offset_quat_xyzw(pair_rot_offset)
+        pair_rot = R.from_quat(pair_rot_q)
+        root_pos = pair_rot.apply(root_pos)
+        obj_pos = pair_rot.apply(obj_pos)
+        root_rot_xyzw = np.stack([quat_mul_xyzw(pair_rot_q, q) for q in root_rot_xyzw], axis=0)
+        obj_rot_xyzw = np.stack([quat_mul_xyzw(pair_rot_q, q) for q in obj_rot_xyzw], axis=0)
     pair_trans = np.array(
         [args.pair_root_pos_offset_x, args.pair_root_pos_offset_y, args.pair_root_pos_offset_z],
         dtype=np.float64,
@@ -798,6 +813,10 @@ def main():
     print(
         f"[INFO] pair_root_pos_offset=({args.pair_root_pos_offset_x:.3f}, "
         f"{args.pair_root_pos_offset_y:.3f}, {args.pair_root_pos_offset_z:.3f})"
+    )
+    print(
+        f"[INFO] pair_root_rot_offset_deg=({args.pair_root_rot_roll_deg:.3f}, "
+        f"{args.pair_root_rot_pitch_deg:.3f}, {args.pair_root_rot_yaw_deg:.3f})"
     )
     print(f"[INFO] object_mesh_scale={args.object_mesh_scale:.3f}")
     print(f"[INFO] root_z_bias(human, object)=({args.human_root_z_bias:.3f}, {args.object_root_z_bias:.3f})")

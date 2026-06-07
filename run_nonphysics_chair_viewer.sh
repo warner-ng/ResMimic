@@ -36,23 +36,9 @@ require_env HUMAN_OBJECT_ROOT_TRANS_X
 require_env HUMAN_OBJECT_ROOT_TRANS_Y
 require_env HUMAN_OBJECT_ROOT_TRANS_Z
 VIEWER_PORT="${VIEWER_PORT:-8080}"
-
 HUMAN_OBJECT_ROOT_ROT_ROLL_DEG="${HUMAN_OBJECT_ROOT_ROT_ROLL_DEG:-0.0}"
 HUMAN_OBJECT_ROOT_ROT_PITCH_DEG="${HUMAN_OBJECT_ROOT_ROT_PITCH_DEG:-0.0}"
 HUMAN_OBJECT_ROOT_ROT_YAW_DEG="${HUMAN_OBJECT_ROOT_ROT_YAW_DEG:-0.0}"
-
-sum_deg() {
-  local a="$1"
-  local b="$2"
-  awk "BEGIN { printf \"%.6f\", $a + $b }"
-}
-
-HUMAN_ROOT_ROT_ROLL_DEG_COMBINED="$(sum_deg "$HUMAN_OBJECT_ROOT_ROT_ROLL_DEG" "$HUMAN_ROOT_ROT_ROLL_DEG")"
-HUMAN_ROOT_ROT_PITCH_DEG_COMBINED="$(sum_deg "$HUMAN_OBJECT_ROOT_ROT_PITCH_DEG" "$HUMAN_ROOT_ROT_PITCH_DEG")"
-HUMAN_ROOT_ROT_YAW_DEG_COMBINED="$(sum_deg "$HUMAN_OBJECT_ROOT_ROT_YAW_DEG" "$HUMAN_ROOT_ROT_YAW_DEG")"
-OBJECT_ROOT_ROT_ROLL_DEG_COMBINED="$(sum_deg "$HUMAN_OBJECT_ROOT_ROT_ROLL_DEG" "$OBJECT_ROOT_ROT_ROLL_DEG")"
-OBJECT_ROOT_ROT_PITCH_DEG_COMBINED="$(sum_deg "$HUMAN_OBJECT_ROOT_ROT_PITCH_DEG" "$OBJECT_ROOT_ROT_PITCH_DEG")"
-OBJECT_ROOT_ROT_YAW_DEG_COMBINED="$(sum_deg "$HUMAN_OBJECT_ROOT_ROT_YAW_DEG" "$OBJECT_ROOT_ROT_YAW_DEG")"
 
 tcp_port_in_use() {
   local port="$1"
@@ -131,12 +117,15 @@ python "$RESMIMIC_ROOT/scripts/play_nonphysics_viser.py" \
   --object-mesh "$OBJECT_MESH" \
   --robot-urdf "$RESMIMIC_ROOT/assets/g1/g1_custom_collision_29dof.urdf" \
   --object-urdf "$OBJECT_URDF" \
-  --human-root-rot-roll-deg "$HUMAN_ROOT_ROT_ROLL_DEG_COMBINED" \
-  --human-root-rot-pitch-deg "$HUMAN_ROOT_ROT_PITCH_DEG_COMBINED" \
-  --human-root-rot-yaw-deg "$HUMAN_ROOT_ROT_YAW_DEG_COMBINED" \
-  --object-root-rot-roll-deg "$OBJECT_ROOT_ROT_ROLL_DEG_COMBINED" \
-  --object-root-rot-pitch-deg "$OBJECT_ROOT_ROT_PITCH_DEG_COMBINED" \
-  --object-root-rot-yaw-deg "$OBJECT_ROOT_ROT_YAW_DEG_COMBINED" \
+  --human-root-rot-roll-deg "$HUMAN_ROOT_ROT_ROLL_DEG" \
+  --human-root-rot-pitch-deg "$HUMAN_ROOT_ROT_PITCH_DEG" \
+  --human-root-rot-yaw-deg "$HUMAN_ROOT_ROT_YAW_DEG" \
+  --object-root-rot-roll-deg "$OBJECT_ROOT_ROT_ROLL_DEG" \
+  --object-root-rot-pitch-deg "$OBJECT_ROOT_ROT_PITCH_DEG" \
+  --object-root-rot-yaw-deg "$OBJECT_ROOT_ROT_YAW_DEG" \
+  --pair-root-rot-roll-deg "$HUMAN_OBJECT_ROOT_ROT_ROLL_DEG" \
+  --pair-root-rot-pitch-deg "$HUMAN_OBJECT_ROOT_ROT_PITCH_DEG" \
+  --pair-root-rot-yaw-deg "$HUMAN_OBJECT_ROOT_ROT_YAW_DEG" \
   --object-root-pos-offset-x "$OBJECT_ROOT_POS_OFFSET_X" \
   --object-root-pos-offset-y "$OBJECT_ROOT_POS_OFFSET_Y" \
   --object-root-pos-offset-z "$OBJECT_ROOT_POS_OFFSET_Z" \

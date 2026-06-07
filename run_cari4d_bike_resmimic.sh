@@ -38,7 +38,8 @@ TAG="${TAG:-Date03_Sub01_bike_May_31_19_34}"  # <<< 改这里
 SPLIT="${SPLIT:-in}"  # <<< 按需改：in | pr | gt
 PAIR_SUFFIX="${PAIR_SUFFIX:-bikez}"  # <<< 改这里
 
-# 修改顺序：修改是有顺序的，这样才能保证motion运动方向合理。
+###### ———————— 修改顺序：修改是有顺序的，这样才能保证motion运动方向合理。———————— #####
+
 # rpy，从法向轴看向平面，顺时针为正。垂直红轴是roll，垂直绿轴是pitch，垂直蓝轴是yaw。
 # 先改object scale，再改object rpy
 
@@ -58,6 +59,12 @@ OBJECT_ROOT_POS_OFFSET_X="${OBJECT_ROOT_POS_OFFSET_X:--0.6}" # object 局部红�
 OBJECT_ROOT_POS_OFFSET_Y="${OBJECT_ROOT_POS_OFFSET_Y:-0}" # object 局部绿轴
 OBJECT_ROOT_POS_OFFSET_Z="${OBJECT_ROOT_POS_OFFSET_Z:-0.07}" # object 局部蓝轴
 
+# ===== human + object 总体 rpy 旋转 =====
+# pair-level：绕世界坐标系同时旋转 human/object 的 root 位置和姿态。
+HUMAN_OBJECT_ROOT_ROT_ROLL_DEG="${HUMAN_OBJECT_ROOT_ROT_ROLL_DEG:--90.0}"
+HUMAN_OBJECT_ROOT_ROT_PITCH_DEG="${HUMAN_OBJECT_ROOT_ROT_PITCH_DEG:-0}"
+HUMAN_OBJECT_ROOT_ROT_YAW_DEG="${HUMAN_OBJECT_ROOT_ROT_YAW_DEG:-0.0}"
+
 # ===== human + object 总体 xyz 平移 =====
 # 总体 xyz 手动控制（pair-level 全局平移），同时作用于 human/object。
 # RUNTIME_PAIR_LEVEL_TARGET_Z 仅控制 pair leveling 后的落地高度（若开启 leveling）。
@@ -67,11 +74,7 @@ HUMAN_OBJECT_ROOT_TRANS_Z="${HUMAN_OBJECT_ROOT_TRANS_Z:--3.5}"
 ENABLE_RUNTIME_PAIR_LEVELING="${ENABLE_RUNTIME_PAIR_LEVELING:-0}"
 RUNTIME_PAIR_LEVEL_TARGET_Z="${RUNTIME_PAIR_LEVEL_TARGET_Z:-0.0}"
 
-# ===== human + object 总体 rpy 旋转 =====
-# pair-level：先作用于 human/object 的各自根姿态，再叠加后续单独 rpy。
-HUMAN_OBJECT_ROOT_ROT_ROLL_DEG="${HUMAN_OBJECT_ROOT_ROT_ROLL_DEG:-0.0}"
-HUMAN_OBJECT_ROOT_ROT_PITCH_DEG="${HUMAN_OBJECT_ROOT_ROT_PITCH_DEG:-0}"
-HUMAN_OBJECT_ROOT_ROT_YAW_DEG="${HUMAN_OBJECT_ROOT_ROT_YAW_DEG:-0.0}"
+
 
 
 
@@ -324,22 +327,15 @@ human_root_rot = np.array([
     float(os.environ["HUMAN_ROOT_ROT_ROLL_DEG"]),
     float(os.environ["HUMAN_ROOT_ROT_PITCH_DEG"]),
     float(os.environ["HUMAN_ROOT_ROT_YAW_DEG"]),
-]) + np.array([
-    float(os.environ["HUMAN_OBJECT_ROOT_ROT_ROLL_DEG"]),
-    float(os.environ["HUMAN_OBJECT_ROOT_ROT_PITCH_DEG"]),
-    float(os.environ["HUMAN_OBJECT_ROOT_ROT_YAW_DEG"]),
 ])
 object_root_rot = np.array([
     float(os.environ["OBJECT_ROOT_ROT_ROLL_DEG"]),
     float(os.environ["OBJECT_ROOT_ROT_PITCH_DEG"]),
     float(os.environ["OBJECT_ROOT_ROT_YAW_DEG"]),
-]) + np.array([
-    float(os.environ["HUMAN_OBJECT_ROOT_ROT_ROLL_DEG"]),
-    float(os.environ["HUMAN_OBJECT_ROOT_ROT_PITCH_DEG"]),
-    float(os.environ["HUMAN_OBJECT_ROOT_ROT_YAW_DEG"]),
 ])
 human_root_rot = f'[{human_root_rot[0]:.1f}, {human_root_rot[1]:.1f}, {human_root_rot[2]:.1f}]'
 object_root_rot = f'[{object_root_rot[0]:.1f}, {object_root_rot[1]:.1f}, {object_root_rot[2]:.1f}]'
+pair_root_rot = f'[{float(os.environ["HUMAN_OBJECT_ROOT_ROT_ROLL_DEG"]):.1f}, {float(os.environ["HUMAN_OBJECT_ROOT_ROT_PITCH_DEG"]):.1f}, {float(os.environ["HUMAN_OBJECT_ROOT_ROT_YAW_DEG"]):.1f}]'
 object_root_pos_offset = f'[{float(os.environ["OBJECT_ROOT_POS_OFFSET_X"]):.3f}, {float(os.environ["OBJECT_ROOT_POS_OFFSET_Y"]):.3f}, {float(os.environ["OBJECT_ROOT_POS_OFFSET_Z"]):.3f}]'
 pair_root_pos_offset = f'[{float(os.environ["HUMAN_OBJECT_ROOT_TRANS_X"]):.3f}, {float(os.environ["HUMAN_OBJECT_ROOT_TRANS_Y"]):.3f}, {float(os.environ["HUMAN_OBJECT_ROOT_TRANS_Z"]):.3f}]'
 object_urdf_file = os.environ["OBJECT_URDF_OVERRIDE_REL"]
@@ -363,6 +359,7 @@ s = re.sub(r'^\s*runtime_pair_level_target_z\s*=\s*[-0-9.]+\s*$', f'        runt
 s = re.sub(r'^\s*human_root_z_bias\s*=\s*[-0-9.]+\s*$', f'        human_root_z_bias = {human_root_z_bias:.3f}', s, flags=re.MULTILINE)
 s = re.sub(r'^\s*object_root_z_bias\s*=\s*[-0-9.]+\s*$', f'        object_root_z_bias = {object_root_z_bias:.3f}', s, flags=re.MULTILINE)
 s = re.sub(r'^\s*object_root_pos_offset\s*=\s*\[.*?\]\s*$', '        object_root_pos_offset = ' + object_root_pos_offset, s, flags=re.MULTILINE)
+s = re.sub(r'^\s*motion_global_rot_offset_deg\s*=\s*\[.*?\]\s*$', '        motion_global_rot_offset_deg = ' + pair_root_rot, s, flags=re.MULTILINE)
 s = re.sub(r'^\s*motion_global_pos_offset\s*=\s*\[.*?\]\s*$', '        motion_global_pos_offset = ' + pair_root_pos_offset, s, flags=re.MULTILINE)
 s = re.sub(r'^\s*object_urdf_file\s*=\s*".*?"\s*$', '        object_urdf_file = "' + object_urdf_file + '"', s, flags=re.MULTILINE)
 s = re.sub(r'^\s*object_obj_file\s*=\s*".*?"\s*$', '        object_obj_file = "' + object_obj_file + '"', s, flags=re.MULTILINE)
@@ -417,7 +414,7 @@ HUMAN_ROOT_ROT_YAW_DEG_COMBINED="$HUMAN_ROOT_ROT_YAW_DEG"
 OBJECT_ROOT_ROT_ROLL_DEG_COMBINED="$OBJECT_ROOT_ROT_ROLL_DEG"
 OBJECT_ROOT_ROT_PITCH_DEG_COMBINED="$OBJECT_ROOT_ROT_PITCH_DEG"
 OBJECT_ROOT_ROT_YAW_DEG_COMBINED="$OBJECT_ROOT_ROT_YAW_DEG"
-echo "[DEBUG] viewer combined rot base+pair handled by viewer: human=$HUMAN_ROOT_ROT_ROLL_DEG_COMBINED,$HUMAN_ROOT_ROT_PITCH_DEG_COMBINED,$HUMAN_ROOT_ROT_YAW_DEG_COMBINED object=$OBJECT_ROOT_ROT_ROLL_DEG_COMBINED,$OBJECT_ROOT_ROT_PITCH_DEG_COMBINED,$OBJECT_ROOT_ROT_YAW_DEG_COMBINED"
+echo "[DEBUG] viewer rot: pair=$HUMAN_OBJECT_ROOT_ROT_ROLL_DEG,$HUMAN_OBJECT_ROOT_ROT_PITCH_DEG,$HUMAN_OBJECT_ROOT_ROT_YAW_DEG human=$HUMAN_ROOT_ROT_ROLL_DEG_COMBINED,$HUMAN_ROOT_ROT_PITCH_DEG_COMBINED,$HUMAN_ROOT_ROT_YAW_DEG_COMBINED object=$OBJECT_ROOT_ROT_ROLL_DEG_COMBINED,$OBJECT_ROOT_ROT_PITCH_DEG_COMBINED,$OBJECT_ROOT_ROT_YAW_DEG_COMBINED"
 HUMAN_OBJECT_ROOT_TRANS_X="${HUMAN_OBJECT_ROOT_TRANS_X}"
 HUMAN_OBJECT_ROOT_TRANS_Y="${HUMAN_OBJECT_ROOT_TRANS_Y}"
 HUMAN_OBJECT_ROOT_TRANS_Z="${HUMAN_OBJECT_ROOT_TRANS_Z}"
@@ -444,6 +441,9 @@ OBJECT_ROOT_Z_BIAS="$OBJECT_ROOT_Z_BIAS" \
 HUMAN_OBJECT_ROOT_TRANS_X="$HUMAN_OBJECT_ROOT_TRANS_X" \
 HUMAN_OBJECT_ROOT_TRANS_Y="$HUMAN_OBJECT_ROOT_TRANS_Y" \
 HUMAN_OBJECT_ROOT_TRANS_Z="$HUMAN_OBJECT_ROOT_TRANS_Z" \
+HUMAN_OBJECT_ROOT_ROT_ROLL_DEG="$HUMAN_OBJECT_ROOT_ROT_ROLL_DEG" \
+HUMAN_OBJECT_ROOT_ROT_PITCH_DEG="$HUMAN_OBJECT_ROOT_ROT_PITCH_DEG" \
+HUMAN_OBJECT_ROOT_ROT_YAW_DEG="$HUMAN_OBJECT_ROOT_ROT_YAW_DEG" \
 VIEWER_PORT="$VIEWER_PORT" \
 bash "$RESMIMIC_ROOT/run_nonphysics_chair_viewer.sh" &
 VIEWER_PID=$!
