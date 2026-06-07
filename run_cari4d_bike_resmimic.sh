@@ -103,6 +103,8 @@ NUM_ENVS="${NUM_ENVS:-1}"
 WAND_ENTITY="${WAND_ENTITY:-warner0709-shanghai-ai-lab}"
 TRAIN_HEADLESS="${TRAIN_HEADLESS:-0}"  # 0=默认有头训练，1=headless训练
 TRAIN_MAX_ITERATIONS="${TRAIN_MAX_ITERATIONS:-900}"
+TRAIN_RECORD_VIDEO="${TRAIN_RECORD_VIDEO:-1}"  # 1=训练中每隔 WANDB_VIDEO_INTERVAL 上传一次视频到 wandb
+WANDB_VIDEO_INTERVAL="${WANDB_VIDEO_INTERVAL:-500}"
 
 # 载入 IsaacGym 后的全局偏移请手动改这里：
 #   /home/warner/_projects/ResMimic/legged_gym/legged_gym/envs/g1/g1_hoi_bike_cari4d_config.py
@@ -470,4 +472,8 @@ TRAIN_ARGS=(
 if [[ "$TRAIN_HEADLESS" == "1" ]]; then
   TRAIN_ARGS+=(--headless)
 fi
+if [[ "$TRAIN_RECORD_VIDEO" == "1" ]]; then
+  TRAIN_ARGS+=(--record_video)
+fi
+export WANDB_VIDEO_INTERVAL
 python "$RESMIMIC_ROOT/legged_gym/legged_gym/scripts/train.py" "${TRAIN_ARGS[@]}"

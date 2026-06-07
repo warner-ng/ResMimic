@@ -232,6 +232,22 @@ class OnPolicyDaggerRunner:
         base_obs = torch.cat([current_obs, history_obs, future_obs], dim=-1)
         return base_obs
 
+    def _should_log_wandb_video(self, iteration):
+        interval = int(os.environ.get("WANDB_VIDEO_INTERVAL", "500"))
+        record_video = getattr(self.env.cfg.env, "record_video", False)
+        return interval > 0 and iteration > 0 and iteration % interval == 0 and record_video and wandb.run is not None
+
+    def _log_wandb_video(self, frames, iteration):
+        if len(frames) == 0:
+            return
+
+        video = np.stack(frames, axis=0)
+        video = video[..., :3].transpose(0, 3, 1, 2).astype(np.uint8)
+        wandb.log(
+            {"Train/video": wandb.Video(video, fps=int(1 / self.env.dt), format="mp4")},
+            step=iteration,
+        )
+
     def learn_RL(self, num_learning_iterations, init_at_random_ep_len=False):
         mean_value_loss = 0.
         mean_surrogate_loss = 0.
@@ -277,6 +293,8 @@ class OnPolicyDaggerRunner:
         for it in range(self.current_learning_iteration, tot_iter):
             start = time.time()
             hist_encoding = it % self.dagger_update_freq == 0
+            video_frames = []
+            log_wandb_video = self._should_log_wandb_video(it)
             # Rollout
             with torch.inference_mode():
                 for i in range(self.num_steps_per_env):
@@ -290,6 +308,11 @@ class OnPolicyDaggerRunner:
                         obs, privileged_obs, rewards, dones, infos = self.env.step(final_actions)
                     else:
                         obs, privileged_obs, rewards, dones, infos = self.env.step(actions)
+
+                    if log_wandb_video:
+                        imgs = self.env.render_record(mode="rgb_array")
+                        if imgs is not None and len(imgs) > 0:
+                            video_frames.append(imgs[0])
 
                     critic_obs = privileged_obs if privileged_obs is not None else obs
                     obs, critic_obs, rewards, dones = obs.to(self.device), critic_obs.to(self.device), rewards.to(self.device), dones.to(self.device)
@@ -350,6 +373,8 @@ class OnPolicyDaggerRunner:
             learn_time = stop - start
             if self.log_dir is not None:
                 self.log(locals())
+            if log_wandb_video:
+                self._log_wandb_video(video_frames, it)
             if it < 2500:
                 if it % self.save_interval == 0:
                     self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(it)))
