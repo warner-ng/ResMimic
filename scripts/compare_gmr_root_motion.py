@@ -114,6 +114,7 @@ def main() -> None:
     parser.add_argument("--post-human", type=Path, required=True, help="Path to post-retarget human pkl.")
     parser.add_argument("--object", type=Path, required=True, help="Path to object motion npz.")
     parser.add_argument("--topk", type=int, default=5, help="Number of worst frames to print.")
+    parser.add_argument("--quiet", action="store_true", help="Only print minimal summary lines.")
     args = parser.parse_args()
 
     pre_root_pos, pre_root_rot, pre_fps = load_preretarget_human(args.pre_human)
@@ -135,7 +136,9 @@ def main() -> None:
     print(f"Frames compared: {n_frames}")
     print(f"Pre-retarget FPS: {pre_fps}")
     print(f"Post-retarget FPS: {post_fps}")
-    print()
+
+    if args.quiet:
+        return
 
     for line in summarize_vector("Post human minus pre human root_pos", root_pos_delta):
         print(line)

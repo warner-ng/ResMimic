@@ -37,28 +37,42 @@ CARI4D_PTH="${CARI4D_PTH:-/home/warner/_projects/CARI4D/output/opt/cari4d-releas
 TAG="${TAG:-Date03_Sub01_bike_May_31_19_34}"  # <<< 改这里
 SPLIT="${SPLIT:-in}"  # <<< 按需改：in | pr | gt
 PAIR_SUFFIX="${PAIR_SUFFIX:-bikez}"  # <<< 改这里
-# 物体位移偏移（在数据生成阶段加到 object trans 上）
-OBJECT_OFFSET_X="${OBJECT_OFFSET_X:--0}"  # <<< 改这里
-OBJECT_OFFSET_Y="${OBJECT_OFFSET_Y:--0.2}"  # <<< 改这里
-OBJECT_OFFSET_Z="${OBJECT_OFFSET_Z:--0.8}"  # <<< 改这里
-OBJECT_ROT_ROLL_DEG="${OBJECT_ROT_ROLL_DEG:--10.0}"  # <<< 改这里：写入object motion的roll偏移
-OBJECT_ROT_PITCH_DEG="${OBJECT_ROT_PITCH_DEG:-0.0}"  # <<< 改这里：写入object motion的pitch偏移
-OBJECT_ROT_YAW_DEG="${OBJECT_ROT_YAW_DEG:-0.0}"  # <<< 改这里：写入object motion的yaw偏移
-OBJECT_VIEWER_SCALE="${OBJECT_VIEWER_SCALE:-1.7}"  # <<< 改这里：viser显示时的物体缩放（仅可视化）
-OBJECT_MESH_MIRROR_AXIS="${OBJECT_MESH_MIRROR_AXIS:-y}"  # <<< 改这里：none|x|y|z，仅viser里翻面
-OBJECT_RPY_ROLL_DEG="${OBJECT_RPY_ROLL_DEG:-0.0}"  # <<< 改这里：viser里额外roll角度
-OBJECT_RPY_PITCH_DEG="${OBJECT_RPY_PITCH_DEG:-0.0}"  # <<< 改这里：viser里额外pitch角度
-OBJECT_RPY_YAW_DEG="${OBJECT_RPY_YAW_DEG:-0.0}"  # <<< 改这里：viser里额外yaw角度
-OBJECT_SCALE_DEBUG_CUBE="${OBJECT_SCALE_DEBUG_CUBE:-0}"  # <<< 改这里：1=显示红色debug立方体
-OBJECT_SCALE_MOTION_FALLBACK="${OBJECT_SCALE_MOTION_FALLBACK:-0}"  # <<< 改这里：1=启用轨迹缩放兜底
-ALIGN_HUMAN_YAW_TO_OBJECT="${ALIGN_HUMAN_YAW_TO_OBJECT:-0}"  # <<< 按需改：1=额外做整段刚体yaw旋转
-TARGET_PAIR_GROUND_Z="${TARGET_PAIR_GROUND_Z:-0.0}"  # <<< 按需改：pair几何最低点要落到的地面z
-HUMAN_ROOT_ROT_ROLL_DEG="${HUMAN_ROOT_ROT_ROLL_DEG:--90.0}"  # <<< 按需改：Isaac Gym 载入阶段的人体root roll补偿
-HUMAN_ROOT_ROT_PITCH_DEG="${HUMAN_ROOT_ROT_PITCH_DEG:--25.0}"  # <<< 按需改：Isaac Gym 载入阶段的人体root pitch补偿
-HUMAN_ROOT_ROT_YAW_DEG="${HUMAN_ROOT_ROT_YAW_DEG:-0.0}"  # <<< 按需改：Isaac Gym 载入阶段的人体root yaw补偿
-OBJECT_ROOT_ROT_ROLL_DEG="${OBJECT_ROOT_ROT_ROLL_DEG:--90.0}"  # <<< 按需改：Isaac Gym 载入阶段的物体root roll补偿
-OBJECT_ROOT_ROT_PITCH_DEG="${OBJECT_ROOT_ROT_PITCH_DEG:-0.0}"  # <<< 按需改：Isaac Gym 载入阶段的物体root pitch补偿
-OBJECT_ROOT_ROT_YAW_DEG="${OBJECT_ROOT_ROT_YAW_DEG:-0.0}"  # <<< 按需改：Isaac Gym 载入阶段的物体root yaw补偿
+# ===== human + object 总体 xyz 平移 =====
+# 总体 xyz 由 runtime pair leveling 自动计算，不手动填 xyz。
+# RUNTIME_PAIR_LEVEL_TARGET_Z 控制总体落地后的目标高度。
+ENABLE_RUNTIME_PAIR_LEVELING="${ENABLE_RUNTIME_PAIR_LEVELING:-1}"
+RUNTIME_PAIR_LEVEL_TARGET_Z="${RUNTIME_PAIR_LEVEL_TARGET_Z:-0.0}"
+
+# ===== human + object 总体 rpy 旋转 =====
+# 总体 rpy 同样由 runtime pair leveling 自动计算，不手动填 rpy。
+# 下面这个只影响文件级 aligned human motion 是否额外估计整段 yaw。
+ALIGN_HUMAN_YAW_TO_OBJECT="${ALIGN_HUMAN_YAW_TO_OBJECT:-0}"
+
+# ===== object 单独 xyz 平移 =====
+# 运行时直接加到 object root position；Isaac 和 viser 同时生效。
+OBJECT_ROOT_POS_OFFSET_X="${OBJECT_ROOT_POS_OFFSET_X:-0.0}"
+OBJECT_ROOT_POS_OFFSET_Y="${OBJECT_ROOT_POS_OFFSET_Y:--0.2}"
+OBJECT_ROOT_POS_OFFSET_Z="${OBJECT_ROOT_POS_OFFSET_Z:--0.8}"
+
+# ===== object 单独 rpy 旋转 =====
+# ROOT_ROT 是世界坐标系旋转，左乘：q = q_offset * q_motion。
+OBJECT_ROOT_ROT_ROLL_DEG="${OBJECT_ROOT_ROT_ROLL_DEG:--90.0}"
+OBJECT_ROOT_ROT_PITCH_DEG="${OBJECT_ROOT_ROT_PITCH_DEG:-0.0}"
+OBJECT_ROOT_ROT_YAW_DEG="${OBJECT_ROOT_ROT_YAW_DEG:-0.0}"
+
+# LOCAL_ROT 是物体局部坐标系旋转，右乘：q = q_motion * q_offset。
+# 先注释掉，后续确认是否需要再放开。
+# OBJECT_ROOT_LOCAL_ROT_ROLL_DEG="${OBJECT_ROOT_LOCAL_ROT_ROLL_DEG:--10.0}"
+# OBJECT_ROOT_LOCAL_ROT_PITCH_DEG="${OBJECT_ROOT_LOCAL_ROT_PITCH_DEG:-0.0}"
+# OBJECT_ROOT_LOCAL_ROT_YAW_DEG="${OBJECT_ROOT_LOCAL_ROT_YAW_DEG:-0.0}"
+
+# ===== human 单独 rpy/高度补偿 =====
+# 这组只修机器人 root 姿态和初始高度；Isaac 和 viser 同时生效。
+HUMAN_ROOT_ROT_ROLL_DEG="${HUMAN_ROOT_ROT_ROLL_DEG:--90.0}"
+HUMAN_ROOT_ROT_PITCH_DEG="${HUMAN_ROOT_ROT_PITCH_DEG:--20.0}"
+HUMAN_ROOT_ROT_YAW_DEG="${HUMAN_ROOT_ROT_YAW_DEG:-0.0}"
+HUMAN_ROOT_Z_BIAS="${HUMAN_ROOT_Z_BIAS:-0.05}"
+OBJECT_ROOT_Z_BIAS="${OBJECT_ROOT_Z_BIAS:-0.03}"
 
 # 任务与训练
 TASK="${TASK:-g1_hoi_bike_cari4d}"  # bike 任务名
@@ -144,12 +158,6 @@ EXPORT_ARGS=(
   --cari4d_root "$CARI4D_ROOT"
   --motion_dir "$MOTION_DIR"
   --pair_suffix "$PAIR_SUFFIX"
-  --object_offset_x "$OBJECT_OFFSET_X"
-  --object_offset_y "$OBJECT_OFFSET_Y"
-  --object_offset_z "$OBJECT_OFFSET_Z"
-  --object_rot_roll_deg "$OBJECT_ROT_ROLL_DEG"
-  --object_rot_pitch_deg "$OBJECT_ROT_PITCH_DEG"
-  --object_rot_yaw_deg "$OBJECT_ROT_YAW_DEG"
 )
 
 "$CARI4D_PYTHON" "$RESMIMIC_ROOT/scripts/export_cari4d_intermediate.py" "${EXPORT_ARGS[@]}"
@@ -238,6 +246,11 @@ echo "[4/6] 自动同步 bike config（motion 路径 + root rotation offsets）.
 export CFG_FILE TAG PAIR_SUFFIX
 export HUMAN_ROOT_ROT_ROLL_DEG HUMAN_ROOT_ROT_PITCH_DEG HUMAN_ROOT_ROT_YAW_DEG
 export OBJECT_ROOT_ROT_ROLL_DEG OBJECT_ROOT_ROT_PITCH_DEG OBJECT_ROOT_ROT_YAW_DEG
+# LOCAL_ROT 保留注释（如有需要再手动放开）
+# export OBJECT_ROOT_LOCAL_ROT_ROLL_DEG OBJECT_ROOT_LOCAL_ROT_PITCH_DEG OBJECT_ROOT_LOCAL_ROT_YAW_DEG
+export OBJECT_ROOT_POS_OFFSET_X OBJECT_ROOT_POS_OFFSET_Y OBJECT_ROOT_POS_OFFSET_Z
+export ENABLE_RUNTIME_PAIR_LEVELING RUNTIME_PAIR_LEVEL_TARGET_Z
+export HUMAN_ROOT_Z_BIAS OBJECT_ROOT_Z_BIAS
 python - <<'PY'
 import os
 import re
@@ -247,6 +260,11 @@ tag = os.environ["TAG"]
 pair = os.environ["PAIR_SUFFIX"]
 human_root_rot = f'[{float(os.environ["HUMAN_ROOT_ROT_ROLL_DEG"]):.1f}, {float(os.environ["HUMAN_ROOT_ROT_PITCH_DEG"]):.1f}, {float(os.environ["HUMAN_ROOT_ROT_YAW_DEG"]):.1f}]'
 object_root_rot = f'[{float(os.environ["OBJECT_ROOT_ROT_ROLL_DEG"]):.1f}, {float(os.environ["OBJECT_ROOT_ROT_PITCH_DEG"]):.1f}, {float(os.environ["OBJECT_ROOT_ROT_YAW_DEG"]):.1f}]'
+object_root_pos_offset = f'[{float(os.environ["OBJECT_ROOT_POS_OFFSET_X"]):.3f}, {float(os.environ["OBJECT_ROOT_POS_OFFSET_Y"]):.3f}, {float(os.environ["OBJECT_ROOT_POS_OFFSET_Z"]):.3f}]'
+enable_pair_leveling = "True" if os.environ["ENABLE_RUNTIME_PAIR_LEVELING"] == "1" else "False"
+pair_level_target_z = float(os.environ["RUNTIME_PAIR_LEVEL_TARGET_Z"])
+human_root_z_bias = float(os.environ["HUMAN_ROOT_Z_BIAS"])
+object_root_z_bias = float(os.environ["OBJECT_ROOT_Z_BIAS"])
 
 with open(cfg, "r", encoding="utf-8") as f:
     s = f.read()
@@ -256,8 +274,15 @@ obj_line = f'object_motion_file = f"{{REPO_ROOT_DIR}}/assets/motions/{tag}_objec
 
 s = re.sub(r'^\s*motion_file\s*=\s*f"\{REPO_ROOT_DIR\}/assets/motions/.*?"\s*$', '        ' + motion_line, s, flags=re.MULTILINE)
 s = re.sub(r'^\s*object_motion_file\s*=\s*f"\{REPO_ROOT_DIR\}/assets/motions/.*?"\s*$', '        ' + obj_line, s, flags=re.MULTILINE)
+s = re.sub(r'^\s*enable_runtime_pair_leveling\s*=\s*(True|False)\s*$', '        enable_runtime_pair_leveling = ' + enable_pair_leveling, s, flags=re.MULTILINE)
+s = re.sub(r'^\s*runtime_pair_level_target_z\s*=\s*[-0-9.]+\s*$', f'        runtime_pair_level_target_z = {pair_level_target_z:.3f}', s, flags=re.MULTILINE)
+s = re.sub(r'^\s*human_root_z_bias\s*=\s*[-0-9.]+\s*$', f'        human_root_z_bias = {human_root_z_bias:.3f}', s, flags=re.MULTILINE)
+s = re.sub(r'^\s*object_root_z_bias\s*=\s*[-0-9.]+\s*$', f'        object_root_z_bias = {object_root_z_bias:.3f}', s, flags=re.MULTILINE)
+s = re.sub(r'^\s*object_root_pos_offset\s*=\s*\[.*?\]\s*$', '        object_root_pos_offset = ' + object_root_pos_offset, s, flags=re.MULTILINE)
 s = re.sub(r'^\s*human_root_rot_offset_deg\s*=\s*\[.*?\]\s*$', '        human_root_rot_offset_deg = ' + human_root_rot, s, flags=re.MULTILINE)
 s = re.sub(r'^\s*object_root_rot_offset_deg\s*=\s*\[.*?\]\s*$', '        object_root_rot_offset_deg = ' + object_root_rot, s, flags=re.MULTILINE)
+# LOCAL_ROT 本次不再从脚本注入配置（避免 unset 导致的 KeyError），如需再启用请放开上方逻辑并手动复用以下行：
+# s = re.sub(r'^\s*object_root_local_rot_offset_deg\s*=\s*\[.*?\]\s*$', '        object_root_local_rot_offset_deg = ' + object_root_local_rot, s, flags=re.MULTILINE)
 s = re.sub(r'^\s*object_motion_rot_offset_deg\s*=\s*\[.*?\]\s*$', '        object_motion_rot_offset_deg = [0.0, 0.0, 0.0]', s, flags=re.MULTILINE)
 
 with open(cfg, "w", encoding="utf-8") as f:
@@ -275,15 +300,23 @@ PRE_HUMAN="$PRE_HUMAN" \
 POST_HUMAN="$ALIGNED_HUMAN" \
 OBJECT_MOTION="$ALIGNED_OBJECT" \
 ALIGNED_HUMAN="$ALIGNED_HUMAN" \
-OBJECT_VIEWER_SCALE="$OBJECT_VIEWER_SCALE" \
-OBJECT_MESH_MIRROR_AXIS="$OBJECT_MESH_MIRROR_AXIS" \
-OBJECT_RPY_ROLL_DEG="$OBJECT_RPY_ROLL_DEG" \
-OBJECT_RPY_PITCH_DEG="$OBJECT_RPY_PITCH_DEG" \
-OBJECT_RPY_YAW_DEG="$OBJECT_RPY_YAW_DEG" \
-OBJECT_SCALE_DEBUG_CUBE="$OBJECT_SCALE_DEBUG_CUBE" \
-OBJECT_SCALE_MOTION_FALLBACK="$OBJECT_SCALE_MOTION_FALLBACK" \
 ALIGN_HUMAN_YAW_TO_OBJECT="$ALIGN_HUMAN_YAW_TO_OBJECT" \
-TARGET_PAIR_GROUND_Z="$TARGET_PAIR_GROUND_Z" \
+HUMAN_ROOT_ROT_ROLL_DEG="$HUMAN_ROOT_ROT_ROLL_DEG" \
+HUMAN_ROOT_ROT_PITCH_DEG="$HUMAN_ROOT_ROT_PITCH_DEG" \
+HUMAN_ROOT_ROT_YAW_DEG="$HUMAN_ROOT_ROT_YAW_DEG" \
+OBJECT_ROOT_ROT_ROLL_DEG="$OBJECT_ROOT_ROT_ROLL_DEG" \
+OBJECT_ROOT_ROT_PITCH_DEG="$OBJECT_ROOT_ROT_PITCH_DEG" \
+OBJECT_ROOT_ROT_YAW_DEG="$OBJECT_ROOT_ROT_YAW_DEG" \
+# OBJECT_ROOT_LOCAL_ROT_ROLL_DEG="$OBJECT_ROOT_LOCAL_ROT_ROLL_DEG" \
+# OBJECT_ROOT_LOCAL_ROT_PITCH_DEG="$OBJECT_ROOT_LOCAL_ROT_PITCH_DEG" \
+# OBJECT_ROOT_LOCAL_ROT_YAW_DEG="$OBJECT_ROOT_LOCAL_ROT_YAW_DEG" \
+OBJECT_ROOT_POS_OFFSET_X="$OBJECT_ROOT_POS_OFFSET_X" \
+OBJECT_ROOT_POS_OFFSET_Y="$OBJECT_ROOT_POS_OFFSET_Y" \
+OBJECT_ROOT_POS_OFFSET_Z="$OBJECT_ROOT_POS_OFFSET_Z" \
+ENABLE_RUNTIME_PAIR_LEVELING="$ENABLE_RUNTIME_PAIR_LEVELING" \
+RUNTIME_PAIR_LEVEL_TARGET_Z="$RUNTIME_PAIR_LEVEL_TARGET_Z" \
+HUMAN_ROOT_Z_BIAS="$HUMAN_ROOT_Z_BIAS" \
+OBJECT_ROOT_Z_BIAS="$OBJECT_ROOT_Z_BIAS" \
 bash "$RESMIMIC_ROOT/run_nonphysics_chair_viewer.sh" &
 VIEWER_PID=$!
 echo "[INFO] viewer pid=$VIEWER_PID"

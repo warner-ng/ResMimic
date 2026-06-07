@@ -32,6 +32,13 @@ except Exception as e:  # pragma: no cover
         "viser is required for this script. Install it first (e.g. pip install viser).\n"
         f"Import error: {type(e).__name__}: {e}"
     )
+try:
+    import trimesh
+except Exception as e:  # pragma: no cover
+    raise SystemExit(
+        "trimesh is required for runtime pair leveling mesh support.\n"
+        f"Install: pip install trimesh\nImport error: {type(e).__name__}: {e}"
+    )
 
 
 def xyzw_to_wxyz(q_xyzw: np.ndarray) -> np.ndarray:
@@ -134,6 +141,87 @@ def load_object_motion(path: str):
     trans = np.asarray(data["trans"], dtype=np.float64)
     rot = np.asarray(data["rot"], dtype=np.float64)  # xyzw
     return trans, rot
+
+
+def quat_mul_xyzw(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
+    x1, y1, z1, w1 = q1
+    x2, y2, z2, w2 = q2
+    return np.array(
+        [
+            w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+            w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+            w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+            w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+        ],
+        dtype=np.float64,
+    )
+
+
+def apply_root_rot_offset_xyzw(root_rot_xyzw: np.ndarray, offset_deg: Tuple[float, float, float]) -> np.ndarray:
+    if np.allclose(np.asarray(offset_deg, dtype=np.float64), 0.0):
+        return root_rot_xyzw.copy()
+    offset_q = R.from_euler("xyz", offset_deg, degrees=True).as_quat()
+    return np.stack([quat_mul_xyzw(offset_q, q) for q in root_rot_xyzw], axis=0)
+
+
+def apply_root_local_rot_offset_xyzw(root_rot_xyzw: np.ndarray, offset_deg: Tuple[float, float, float]) -> np.ndarray:
+    if np.allclose(np.asarray(offset_deg, dtype=np.float64), 0.0):
+        return root_rot_xyzw.copy()
+    offset_q = R.from_euler("xyz", offset_deg, degrees=True).as_quat()
+    return np.stack([quat_mul_xyzw(q, offset_q) for q in root_rot_xyzw], axis=0)
+
+
+def compute_pair_level_transform(
+    root_pos: np.ndarray,
+    root_rot_xyzw: np.ndarray,
+    local_body_pos: np.ndarray,
+    foot_ids: List[int],
+    object_pos: np.ndarray,
+    object_rot_xyzw: np.ndarray,
+    object_points: np.ndarray,
+    target_z: float,
+) -> Tuple[np.ndarray, np.ndarray]:
+    world_feet = R.from_quat(root_rot_xyzw[0]).apply(local_body_pos[0, foot_ids]) + root_pos[0]
+    human_support = world_feet[np.argmin(world_feet[:, 2])]
+    world_obj = R.from_quat(object_rot_xyzw[0]).apply(object_points) + object_pos[0]
+    object_support = world_obj[np.argmin(world_obj[:, 2])]
+
+    d = human_support - object_support
+    h = d.copy()
+    h[2] = 0.0
+    if np.linalg.norm(h) > 1e-8 and np.linalg.norm(d) > 1e-8 and abs(d[2]) > 1e-8:
+        axis = np.cross(d, h)
+        axis_norm = np.linalg.norm(axis)
+        if axis_norm > 1e-8:
+            angle = np.arccos(np.clip(np.dot(d, h) / (np.linalg.norm(d) * np.linalg.norm(h)), -1.0, 1.0))
+            level_rot = R.from_rotvec(axis / axis_norm * angle)
+        else:
+            level_rot = R.identity()
+    else:
+        level_rot = R.identity()
+
+    midpoint = 0.5 * (human_support + object_support)
+    trans = midpoint - level_rot.apply(midpoint)
+    human_support_after = level_rot.apply(human_support) + trans
+    object_support_after = level_rot.apply(object_support) + trans
+    trans[2] += target_z - 0.5 * (human_support_after[2] + object_support_after[2])
+    return level_rot.as_quat(), trans
+
+
+def apply_pair_level_transform(
+    root_pos: np.ndarray,
+    root_rot_xyzw: np.ndarray,
+    object_pos: np.ndarray,
+    object_rot_xyzw: np.ndarray,
+    level_rot_xyzw: np.ndarray,
+    level_trans: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    level_rot = R.from_quat(level_rot_xyzw)
+    root_pos_out = level_rot.apply(root_pos) + level_trans[None, :]
+    object_pos_out = level_rot.apply(object_pos) + level_trans[None, :]
+    root_rot_out = np.stack([quat_mul_xyzw(level_rot_xyzw, q) for q in root_rot_xyzw], axis=0)
+    object_rot_out = np.stack([quat_mul_xyzw(level_rot_xyzw, q) for q in object_rot_xyzw], axis=0)
+    return root_pos_out, root_rot_out, object_pos_out, object_rot_out
 
 
 def build_qpos_sequence(
@@ -360,42 +448,80 @@ def main():
         default="/home/warner/_projects/ResMimic/legged_gym/assets/chairblack_cari4d/chairblack_cari4d.urdf",
         help="Optional object URDF path (if missing, only object frame is shown)",
     )
-    parser.add_argument(
-        "--object-scale",
-        type=float,
-        default=1.0,
-        help="Viewer-only uniform object scale (does not change motion/training data).",
-    )
-    parser.add_argument(
-        "--object-motion-scale-fallback",
-        action="store_true",
-        help="Fallback: scale object translation trajectory around first frame for visible size effect.",
-    )
-    parser.add_argument(
-        "--object-mesh-mirror-axis",
-        type=str,
-        default="none",
-        choices=["none", "x", "y", "z"],
-        help="Viewer-only object mesh mirror axis. Keeps object motion unchanged.",
-    )
-    parser.add_argument("--object-rpy-roll-deg", type=float, default=0.0, help="Viewer-only object visual roll offset (deg).")
-    parser.add_argument("--object-rpy-pitch-deg", type=float, default=0.0, help="Viewer-only object visual pitch offset (deg).")
-    parser.add_argument("--object-rpy-yaw-deg", type=float, default=0.0, help="Viewer-only object visual yaw offset (deg).")
+    parser.add_argument("--object-mesh", required=True, help="Object mesh path used for runtime pair leveling.")
+    parser.add_argument("--human-root-rot-roll-deg", type=float, default=0.0)
+    parser.add_argument("--human-root-rot-pitch-deg", type=float, default=0.0)
+    parser.add_argument("--human-root-rot-yaw-deg", type=float, default=0.0)
+    parser.add_argument("--object-root-rot-roll-deg", type=float, default=0.0)
+    parser.add_argument("--object-root-rot-pitch-deg", type=float, default=0.0)
+    parser.add_argument("--object-root-rot-yaw-deg", type=float, default=0.0)
+    parser.add_argument("--object-root-local-rot-roll-deg", type=float, default=0.0)
+    parser.add_argument("--object-root-local-rot-pitch-deg", type=float, default=0.0)
+    parser.add_argument("--object-root-local-rot-yaw-deg", type=float, default=0.0)
+    parser.add_argument("--object-root-pos-offset-x", type=float, default=0.0)
+    parser.add_argument("--object-root-pos-offset-y", type=float, default=0.0)
+    parser.add_argument("--object-root-pos-offset-z", type=float, default=0.0)
+    parser.add_argument("--enable-runtime-pair-leveling", action="store_true")
+    parser.add_argument("--runtime-pair-level-target-z", type=float, default=0.0)
+    parser.add_argument("--human-root-z-bias", type=float, default=0.05)
+    parser.add_argument("--object-root-z-bias", type=float, default=0.03)
     parser.add_argument("--host", default="0.0.0.0", help="Viser host")
     parser.add_argument("--port", type=int, default=8080, help="Viser port")
     parser.add_argument("--fps", type=int, default=0, help="Override playback FPS (0 means use file fps)")
-    parser.add_argument(
-        "--debug-object-scale-cube",
-        action="store_true",
-        help="Add a tiny cube under object_visual to verify parent scale is applied.",
-    )
     args = parser.parse_args()
 
     fps_file, root_pos, root_rot_xyzw, dof_pos = load_human_motion(args.human)
     obj_pos, obj_rot_xyzw = load_object_motion(args.object)
-    if args.object_motion_scale_fallback and abs(float(args.object_scale) - 1.0) > 1e-8:
-        c = obj_pos[0].copy()
-        obj_pos = (obj_pos - c[None, :]) * float(args.object_scale) + c[None, :]
+    with open(args.human, "rb") as f:
+        human_data = pickle.load(f)
+    local_body_pos = np.asarray(human_data["local_body_pos"], dtype=np.float64)
+    link_body_list = human_data["link_body_list"]
+    foot_ids = [i for i, name in enumerate(link_body_list) if any(key in name.lower() for key in ("ankle", "toe", "foot"))]
+    if not foot_ids:
+        raise ValueError("No ankle/toe/foot links found in human motion for runtime pair leveling.")
+    mesh = trimesh.load(args.object_mesh, force="mesh", process=False)
+    object_points = np.asarray(mesh.vertices, dtype=np.float64)
+    object_points = object_points - object_points.mean(axis=0, keepdims=True)
+
+    root_rot_xyzw = apply_root_rot_offset_xyzw(
+        root_rot_xyzw,
+        (args.human_root_rot_roll_deg, args.human_root_rot_pitch_deg, args.human_root_rot_yaw_deg),
+    )
+    obj_rot_xyzw = apply_root_rot_offset_xyzw(
+        obj_rot_xyzw,
+        (args.object_root_rot_roll_deg, args.object_root_rot_pitch_deg, args.object_root_rot_yaw_deg),
+    )
+    obj_rot_xyzw = apply_root_local_rot_offset_xyzw(
+        obj_rot_xyzw,
+        (
+            args.object_root_local_rot_roll_deg,
+            args.object_root_local_rot_pitch_deg,
+            args.object_root_local_rot_yaw_deg,
+        ),
+    )
+    obj_pos = obj_pos + np.array(
+        [args.object_root_pos_offset_x, args.object_root_pos_offset_y, args.object_root_pos_offset_z],
+        dtype=np.float64,
+    )[None, :]
+    if args.enable_runtime_pair_leveling:
+        level_rot_xyzw, level_trans = compute_pair_level_transform(
+            root_pos,
+            root_rot_xyzw,
+            local_body_pos,
+            foot_ids,
+            obj_pos,
+            obj_rot_xyzw,
+            object_points,
+            args.runtime_pair_level_target_z,
+        )
+        root_pos, root_rot_xyzw, obj_pos, obj_rot_xyzw = apply_pair_level_transform(
+            root_pos, root_rot_xyzw, obj_pos, obj_rot_xyzw, level_rot_xyzw, level_trans
+        )
+
+    root_pos = root_pos.copy()
+    obj_pos = obj_pos.copy()
+    root_pos[:, 2] += float(args.human_root_z_bias)
+    obj_pos[:, 2] += float(args.object_root_z_bias)
 
     n = int(min(len(root_pos), len(obj_pos), len(dof_pos), len(root_rot_xyzw), len(obj_rot_xyzw)))
     if n <= 0:
@@ -417,24 +543,7 @@ def main():
     object_urdf = None
     object_urdf_path = Path(args.object_urdf)
     if object_urdf_path.exists():
-        object_urdf_load = str(object_urdf_path)
-        if abs(float(args.object_scale) - 1.0) > 1e-8:
-            object_urdf_load = build_scaled_urdf_copy(str(object_urdf_path), float(args.object_scale))
-        object_urdf = _build_urdf(server, object_urdf_load, root_node_name="/world/object_base/object_visual/object")
-        q_vis = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
-        if args.object_mesh_mirror_axis != "none":
-            q_vis = axis_angle_to_wxyz(args.object_mesh_mirror_axis, 180.0)
-        q_rpy = rpy_deg_to_wxyz(args.object_rpy_roll_deg, args.object_rpy_pitch_deg, args.object_rpy_yaw_deg)
-        q_vis_xyzw = wxyz_to_xyzw(q_vis)
-        q_rpy_xyzw = wxyz_to_xyzw(q_rpy)
-        q_combined_xyzw = (R.from_quat(q_vis_xyzw) * R.from_quat(q_rpy_xyzw)).as_quat()
-        object_visual.wxyz = xyzw_to_wxyz(q_combined_xyzw)
-        if args.debug_object_scale_cube:
-            server.scene.add_box(
-                "/world/object_base/object_visual/debug_scale_cube",
-                dimensions=(0.1, 0.1, 0.1),
-                color=(255, 80, 80),
-            )
+        object_urdf = _build_urdf(server, str(object_urdf_path), root_node_name="/world/object_base/object_visual/object")
     else:
         print(f"[WARN] object urdf not found, showing only object frame: {object_urdf_path}")
 
@@ -455,13 +564,27 @@ def main():
 
     print(f"[READY] Non-physics viewer running at http://{args.host}:{args.port}")
     print(f"[INFO] frames={n}, fps={fps}, dof={dof_pos.shape[1]}")
-    print(f"[INFO] object_scale(viewer-only)={float(args.object_scale):.4f}")
-    print(f"[INFO] object_mesh_mirror_axis(viewer-only)={args.object_mesh_mirror_axis}")
     print(
-        f"[INFO] object_rpy_deg(viewer-only)=({args.object_rpy_roll_deg:.3f}, "
-        f"{args.object_rpy_pitch_deg:.3f}, {args.object_rpy_yaw_deg:.3f})"
+        f"[INFO] human_root_rot_offset_deg=({args.human_root_rot_roll_deg:.3f}, "
+        f"{args.human_root_rot_pitch_deg:.3f}, {args.human_root_rot_yaw_deg:.3f})"
     )
-    print("[INFO] object_scale mode=urdf_mesh_scale")
+    print(
+        f"[INFO] object_root_rot_offset_deg=({args.object_root_rot_roll_deg:.3f}, "
+        f"{args.object_root_rot_pitch_deg:.3f}, {args.object_root_rot_yaw_deg:.3f})"
+    )
+    print(
+        f"[INFO] object_root_local_rot_offset_deg=({args.object_root_local_rot_roll_deg:.3f}, "
+        f"{args.object_root_local_rot_pitch_deg:.3f}, {args.object_root_local_rot_yaw_deg:.3f})"
+    )
+    print(
+        f"[INFO] object_root_pos_offset=({args.object_root_pos_offset_x:.3f}, "
+        f"{args.object_root_pos_offset_y:.3f}, {args.object_root_pos_offset_z:.3f})"
+    )
+    print(
+        f"[INFO] runtime_pair_leveling={'on' if args.enable_runtime_pair_leveling else 'off'}, "
+        f"target_z={args.runtime_pair_level_target_z:.3f}"
+    )
+    print(f"[INFO] root_z_bias(human, object)=({args.human_root_z_bias:.3f}, {args.object_root_z_bias:.3f})")
 
     try:
         while True:

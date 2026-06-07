@@ -10,6 +10,8 @@ cmu_fbx_all/
 npy
 pkl
 npz
+*.pkl
+*.npz
 phc/
 
 motion_data/

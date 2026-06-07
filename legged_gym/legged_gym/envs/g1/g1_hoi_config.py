@@ -16,6 +16,9 @@ class G1HOICfg(G1MimicStuFutureCfg):
         # This preserves pair relative geometry while avoiding file-space re-baking.
         enable_runtime_pair_leveling = False
         runtime_pair_level_target_z = 0.0
+        human_root_z_bias = 0.05
+        object_root_z_bias = 0.03
+        object_root_pos_offset = [0.0, 0.0, 0.0]
         object_asset_root = f'{LEGGED_GYM_ROOT_DIR}/assets'
         object_urdf_file = 'suitcase/suitcase.urdf'
         object_obj_file = 'suitcase/suitcase.obj'
@@ -25,6 +28,9 @@ class G1HOICfg(G1MimicStuFutureCfg):
         # Constant object orientation calibration in degrees [roll_x, pitch_y, yaw_z].
         # Applied to object root quaternions before they are written into Isaac Gym root states.
         object_root_rot_offset_deg = [0.0, 0.0, 0.0]
+        # Local object root calibration in degrees [roll_x, pitch_y, yaw_z].
+        # This matches the old preprocessing convention: q_corrected = q_motion * q_offset.
+        object_root_local_rot_offset_deg = [0.0, 0.0, 0.0]
         # Constant object orientation calibration in degrees [roll_x, pitch_y, yaw_z].
         # This offsets object motion quaternions inside the motion loader while keeping positions unchanged.
         object_motion_rot_offset_deg = [0.0, 0.0, 0.0]

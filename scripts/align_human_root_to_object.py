@@ -113,6 +113,7 @@ def main() -> None:
         action="store_true",
         help="Estimate and apply one global yaw rotation before solving translation.",
     )
+    parser.add_argument("--quiet", action="store_true", help="Only print minimal summary lines.")
     args = parser.parse_args()
 
     human_data = load_human_motion(args.human)
@@ -151,6 +152,11 @@ def main() -> None:
         pickle.dump(aligned, f)
 
     after_mean, after_p95, after_max = summarize_xy_distance(aligned_pos, object_root_pos)
+
+    if args.quiet:
+        print("Rigid alignment finished.")
+        print(f"Applied translation xy = [{translation_xy[0]:.6f}, {translation_xy[1]:.6f}]")
+        return
 
     print("Rigid alignment finished.")
     print(f"Input human: {args.human}")
