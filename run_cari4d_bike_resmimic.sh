@@ -44,7 +44,7 @@ PAIR_SUFFIX="${PAIR_SUFFIX:-bikez}"  # <<< 改这里
 # 先改object scale，再改object rpy
 
 # ===== object scale 统一缩放系数：同时作用于 IsaacGym 与 viser =====
-OBJECT_SCALE="${OBJECT_SCALE:-0.45}"  
+OBJECT_SCALE="${OBJECT_SCALE:-0.4}"  
 
 # ===== object 单独 rpy 旋转 =====
 # ROOT_ROT 是世界坐标系旋转，左乘：q = q_offset * q_motion。
@@ -57,7 +57,7 @@ OBJECT_ROOT_ROT_YAW_DEG="${OBJECT_ROOT_ROT_YAW_DEG:--60.0}"
 # 沿 object root 的局部坐标轴平移；Isaac 和 viser 同时生效。
 OBJECT_ROOT_POS_OFFSET_X="${OBJECT_ROOT_POS_OFFSET_X:--0.6}" # object 局部红轴
 OBJECT_ROOT_POS_OFFSET_Y="${OBJECT_ROOT_POS_OFFSET_Y:-0}" # object 局部绿轴
-OBJECT_ROOT_POS_OFFSET_Z="${OBJECT_ROOT_POS_OFFSET_Z:-0.07}" # object 局部蓝轴
+OBJECT_ROOT_POS_OFFSET_Z="${OBJECT_ROOT_POS_OFFSET_Z:-0.1}" # object 局部蓝轴
 
 # ===== human + object 总体 rpy 旋转 =====
 # pair-level：绕世界坐标系同时旋转 human/object 的 root 位置和姿态。
@@ -70,25 +70,22 @@ HUMAN_OBJECT_ROOT_ROT_YAW_DEG="${HUMAN_OBJECT_ROOT_ROT_YAW_DEG:-0.0}"
 # RUNTIME_PAIR_LEVEL_TARGET_Z 仅控制 pair leveling 后的落地高度（若开启 leveling）。
 HUMAN_OBJECT_ROOT_TRANS_X="${HUMAN_OBJECT_ROOT_TRANS_X:-0.0}"
 HUMAN_OBJECT_ROOT_TRANS_Y="${HUMAN_OBJECT_ROOT_TRANS_Y:-0.0}"
-HUMAN_OBJECT_ROOT_TRANS_Z="${HUMAN_OBJECT_ROOT_TRANS_Z:-1.1}"
+HUMAN_OBJECT_ROOT_TRANS_Z="${HUMAN_OBJECT_ROOT_TRANS_Z:-1.0}"
 ENABLE_RUNTIME_PAIR_LEVELING="${ENABLE_RUNTIME_PAIR_LEVELING:-0}"
 RUNTIME_PAIR_LEVEL_TARGET_Z="${RUNTIME_PAIR_LEVEL_TARGET_Z:-0.0}"
 
 
 
-
-
-
-
-# ===== human 单独 rpy/ =====
+# ===== human 单独 rpy，但是一般不用修，修物体即可 =====
 # 这组只修机器人 root 姿态；Isaac 和 viser 同时生效。
 HUMAN_ROOT_ROT_ROLL_DEG="${HUMAN_ROOT_ROT_ROLL_DEG:-0.0}"
 HUMAN_ROOT_ROT_PITCH_DEG="${HUMAN_ROOT_ROT_PITCH_DEG:-0.0}"
 HUMAN_ROOT_ROT_YAW_DEG="${HUMAN_ROOT_ROT_YAW_DEG:-0.0}"
 
-# 高度补偿
-HUMAN_ROOT_Z_BIAS="${HUMAN_ROOT_Z_BIAS:-0.0}"
-OBJECT_ROOT_Z_BIAS="${OBJECT_ROOT_Z_BIAS:-0.0}"
+# ===== IsaacGym 生成高度 =====
+# 只影响 IsaacGym reset 时真实 actor 的 spawn 高度，不改 motion/ref 高度。
+HUMAN_SPAWN_Z_BIAS="${HUMAN_SPAWN_Z_BIAS:-0.0}"
+OBJECT_SPAWN_Z_BIAS="${OBJECT_SPAWN_Z_BIAS:-0.1}"
 
 # ===== 之所以没有human 单独 xyz，是因为调了object就不用调human了 =====
 
@@ -318,7 +315,7 @@ export HUMAN_ROOT_ROT_ROLL_DEG HUMAN_ROOT_ROT_PITCH_DEG HUMAN_ROOT_ROT_YAW_DEG
 export OBJECT_ROOT_ROT_ROLL_DEG OBJECT_ROOT_ROT_PITCH_DEG OBJECT_ROOT_ROT_YAW_DEG
 export OBJECT_ROOT_POS_OFFSET_X OBJECT_ROOT_POS_OFFSET_Y OBJECT_ROOT_POS_OFFSET_Z
 export ENABLE_RUNTIME_PAIR_LEVELING RUNTIME_PAIR_LEVEL_TARGET_Z
-export HUMAN_ROOT_Z_BIAS OBJECT_ROOT_Z_BIAS
+export HUMAN_SPAWN_Z_BIAS OBJECT_SPAWN_Z_BIAS
 python - <<'PY'
 import os
 import re
@@ -346,8 +343,8 @@ object_urdf_file = os.environ["OBJECT_URDF_OVERRIDE_REL"]
 object_obj_file = os.environ["OBJECT_OBJ_OVERRIDE_REL"]
 enable_pair_leveling = "True" if os.environ["ENABLE_RUNTIME_PAIR_LEVELING"] == "1" else "False"
 pair_level_target_z = float(os.environ["RUNTIME_PAIR_LEVEL_TARGET_Z"])
-human_root_z_bias = float(os.environ["HUMAN_ROOT_Z_BIAS"])
-object_root_z_bias = float(os.environ["OBJECT_ROOT_Z_BIAS"])
+human_root_z_bias = float(os.environ["HUMAN_SPAWN_Z_BIAS"])
+object_root_z_bias = float(os.environ["OBJECT_SPAWN_Z_BIAS"])
 
 with open(cfg, "r", encoding="utf-8") as f:
     s = f.read()
@@ -440,8 +437,8 @@ OBJECT_URDF="$OBJECT_URDF" \
 OBJECT_MESH="$OBJECT_MESH" \
 ENABLE_RUNTIME_PAIR_LEVELING="$ENABLE_RUNTIME_PAIR_LEVELING" \
 RUNTIME_PAIR_LEVEL_TARGET_Z="$RUNTIME_PAIR_LEVEL_TARGET_Z" \
-HUMAN_ROOT_Z_BIAS="$HUMAN_ROOT_Z_BIAS" \
-OBJECT_ROOT_Z_BIAS="$OBJECT_ROOT_Z_BIAS" \
+HUMAN_ROOT_Z_BIAS="0.0" \
+OBJECT_ROOT_Z_BIAS="0.0" \
 HUMAN_OBJECT_ROOT_TRANS_X="$HUMAN_OBJECT_ROOT_TRANS_X" \
 HUMAN_OBJECT_ROOT_TRANS_Y="$HUMAN_OBJECT_ROOT_TRANS_Y" \
 HUMAN_OBJECT_ROOT_TRANS_Z="$HUMAN_OBJECT_ROOT_TRANS_Z" \
