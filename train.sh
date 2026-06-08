@@ -14,7 +14,7 @@ python legged_gym/legged_gym/scripts/train.py --task "g1_hoi" \
             --exptid "chair" \
             --device cuda:0 \
             --teacher_exptid None \
-            --num_envs 4096 \
+            --num_envs 1 \
             --wandb_entity "$WANDB_ENTITY" \
-            --headless \
+            --headless False \
             --max_iterations 900

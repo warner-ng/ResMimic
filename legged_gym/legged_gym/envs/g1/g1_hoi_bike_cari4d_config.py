@@ -28,7 +28,14 @@ class G1HOIBikeCari4DCfg(G1HOICfg):
         motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_human_upright_bikez_aligned.pkl"  # overwritten by run_cari4d_bike_resmimic.sh
         object_motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_object_upright_bikez_aligned.npz"  # overwritten by run_cari4d_bike_resmimic.sh
     class rewards(G1HOICfg.rewards):
-        termination_when_object_far = True
+        # 原来是 True；bike 当前物体点云对齐误差会过早触发 termination，先关闭。
+        # termination_when_object_far = True
+        termination_when_object_far = False
+        # inherited original:
+        # termination_roll = 1.0
+        # termination_pitch = 1.0
+        termination_roll = 4.0
+        termination_pitch = 4.0
         class scales(G1HOICfg.rewards.scales):
             tracking_object_point_cloud = 2.0
 
@@ -54,6 +61,13 @@ class G1HOIBikeCari4DCfgDAgger(G1HOICfgDAgger):
         motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_human_upright_bikez_aligned.pkl"  # overwritten by run_cari4d_bike_resmimic.sh
         object_motion_file = f"{REPO_ROOT_DIR}/assets/motions/Date03_Sub01_bike_May_31_19_34_object_upright_bikez_aligned.npz"  # overwritten by run_cari4d_bike_resmimic.sh
     class rewards(G1HOICfgDAgger.rewards):
-        termination_when_object_far = True
+        # 原来是 True；bike 当前物体点云对齐误差会过早触发 termination，先关闭。
+        # termination_when_object_far = True
+        termination_when_object_far = False
+        # inherited original:
+        # termination_roll = 1.0
+        # termination_pitch = 1.0
+        termination_roll = 4.0
+        termination_pitch = 4.0
         class scales(G1HOICfgDAgger.rewards.scales):
             tracking_object_point_cloud = 2.0

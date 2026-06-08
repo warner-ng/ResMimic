@@ -30,6 +30,7 @@
 
 import time
 import os
+import subprocess
 from collections import deque
 import statistics
 from rich import print
@@ -41,7 +42,6 @@ import wandb
 # import ml_runlog
 import datetime
 
-import numpy as np
 from rsl_rl.algorithms import *
 from rsl_rl.modules import *
 from rsl_rl.storage.replay_buffer import ReplayBuffer
@@ -232,21 +232,40 @@ class OnPolicyDaggerRunner:
         base_obs = torch.cat([current_obs, history_obs, future_obs], dim=-1)
         return base_obs
 
-    def _should_log_wandb_video(self, iteration):
-        interval = int(os.environ.get("WANDB_VIDEO_INTERVAL", "500"))
-        record_video = getattr(self.env.cfg.env, "record_video", False)
-        return interval > 0 and iteration > 0 and iteration % interval == 0 and record_video and wandb.run is not None
+    def _should_eval_training_video(self, checkpoint_iter):
+        enabled = os.environ.get("TRAIN_EVAL_RECORD_VIDEO", "0") == "1"
+        interval = int(os.environ.get("TRAIN_EVAL_VIDEO_INTERVAL", "100"))
+        return enabled and interval > 0 and checkpoint_iter % interval == 0
 
-    def _log_wandb_video(self, frames, iteration):
-        if len(frames) == 0:
-            return
-
-        video = np.stack(frames, axis=0)
-        video = video[..., :3].transpose(0, 3, 1, 2).astype(np.uint8)
+    def _run_training_eval_video(self, checkpoint_iter):
+        script_dir = os.path.join(LEGGED_GYM_ROOT_DIR, "legged_gym", "scripts")
+        proj_name = os.environ.get("TRAIN_EVAL_PROJ_NAME", os.path.basename(os.path.dirname(self.log_dir)))
+        exptid = os.environ.get("TRAIN_EVAL_EXPTID", os.path.basename(self.log_dir))
+        cmd = [
+            sys.executable,
+            os.path.join(script_dir, "play_residual.py"),
+            "--task", os.environ.get("TRAIN_EVAL_TASK", "g1_hoi"),
+            "--proj_name", proj_name,
+            "--teacher_exptid", "None",
+            "--exptid", exptid,
+            "--wandb_entity", os.environ.get("TRAIN_EVAL_WAND_ENTITY", "warner0709-shanghai-ai-lab"),
+            "--checkpoint", str(checkpoint_iter),
+            "--num_envs", os.environ.get("TRAIN_EVAL_NUM_ENVS", "1"),
+            "--device", os.environ.get("TRAIN_EVAL_DEVICE", "cuda:0"),
+            "--record_video",
+        ]
+        print(f"[train-eval-video] checkpoint={checkpoint_iter} command={' '.join(cmd)}")
+        subprocess.run(cmd, cwd=script_dir, check=True)
+        video_path = os.path.join(LEGGED_GYM_ROOT_DIR, "logs", "videos_retarget", exptid, f"{proj_name}-{exptid}.mp4")
+        if not os.path.exists(video_path):
+            raise RuntimeError(f"Eval video recording failed at checkpoint {checkpoint_iter}: {video_path} was not created.")
+        if wandb.run is None:
+            raise RuntimeError(f"Eval video was recorded but cannot upload because wandb.run is not active: {video_path}")
         wandb.log(
-            {"Train/video": wandb.Video(video, fps=int(1 / self.env.dt), format="mp4")},
-            step=iteration,
+            {"Eval/video": wandb.Video(video_path, fps=int(1 / self.env.dt), format="mp4")},
+            step=checkpoint_iter,
         )
+        print(f"[train-eval-video] uploaded to wandb: {video_path}")
 
     def learn_RL(self, num_learning_iterations, init_at_random_ep_len=False):
         mean_value_loss = 0.
@@ -293,8 +312,6 @@ class OnPolicyDaggerRunner:
         for it in range(self.current_learning_iteration, tot_iter):
             start = time.time()
             hist_encoding = it % self.dagger_update_freq == 0
-            video_frames = []
-            log_wandb_video = self._should_log_wandb_video(it)
             # Rollout
             with torch.inference_mode():
                 for i in range(self.num_steps_per_env):
@@ -308,11 +325,6 @@ class OnPolicyDaggerRunner:
                         obs, privileged_obs, rewards, dones, infos = self.env.step(final_actions)
                     else:
                         obs, privileged_obs, rewards, dones, infos = self.env.step(actions)
-
-                    if log_wandb_video:
-                        imgs = self.env.render_record(mode="rgb_array")
-                        if imgs is not None and len(imgs) > 0:
-                            video_frames.append(imgs[0])
 
                     critic_obs = privileged_obs if privileged_obs is not None else obs
                     obs, critic_obs, rewards, dones = obs.to(self.device), critic_obs.to(self.device), rewards.to(self.device), dones.to(self.device)
@@ -373,17 +385,21 @@ class OnPolicyDaggerRunner:
             learn_time = stop - start
             if self.log_dir is not None:
                 self.log(locals())
-            if log_wandb_video:
-                self._log_wandb_video(video_frames, it)
+            saved_checkpoint_iter = None
             if it < 2500:
                 if it % self.save_interval == 0:
                     self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(it)))
+                    saved_checkpoint_iter = it
             elif it <= 10000:
                 if it % (2*self.save_interval) == 0:
                     self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(it)))
+                    saved_checkpoint_iter = it
             else:
                 if it % (5*self.save_interval) == 0:
                     self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(it)))
+                    saved_checkpoint_iter = it
+            if saved_checkpoint_iter is not None and self._should_eval_training_video(saved_checkpoint_iter):
+                self._run_training_eval_video(saved_checkpoint_iter)
             ep_infos.clear()
         
         # self.current_learning_iteration += num_learning_iterations
@@ -454,7 +470,7 @@ class OnPolicyDaggerRunner:
         if wandb.run is not None:
             wandb.log(wandb_dict, step=locs['it'])
 
-        str = f" \033[1m Learning iteration {locs['it']}/{self.current_learning_iteration + locs['num_learning_iterations']} \033[0m "
+        str = f" Learning iteration {locs['it']}/{self.current_learning_iteration + locs['num_learning_iterations']} "
 
         scale_str = f"""{'Regularization_scale:':>{pad}} {locs['regularization_scale']:.4f}\n"""
         average_episode_length = f"""{'Average_episode_length:':>{pad}} {locs['average_episode_length']:.4f}\n"""

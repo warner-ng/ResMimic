@@ -74,6 +74,20 @@ Run evaluation (play) for a trained run. From the repository root:
 ./eval.sh <wandb_run_id> <checkpoint_iter>
 
 ./eval.sh ou43tqqk 900 --record_video
+
+cd /home/warner/_projects/ResMimic/legged_gym/legged_gym/
+
+python play_residual.py \
+  --task g1_hoi_bike_cari4d \
+  --proj_name bike \
+  --exptid bike_gui_train \
+  --checkpoint 1300 \
+  --num_envs 1 \
+  --device cuda:0 \
+  --teacher_exptid None \
+  --teacher_checkpoint -1 \
+  --wandb_entity warner0709-shanghai-ai-lab \
+  --record_video
 ```
 
 Example: `./eval.sh abc123def 5000` runs evaluation for run `abc123def` at checkpoint iteration 5000.

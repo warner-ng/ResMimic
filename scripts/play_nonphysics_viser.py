@@ -13,6 +13,7 @@ No physics stepping is performed; this is render-only playback.
 from __future__ import annotations
 
 import argparse
+import os
 import pickle
 import tempfile
 import threading
@@ -25,6 +26,8 @@ from typing import List, Tuple
 
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+
+URDF_DIAG = os.environ.get("VISER_URDF_DIAG", "0") == "1"
 
 try:
     import viser
@@ -45,6 +48,8 @@ except Exception as e:  # pragma: no cover
 
 def _log_urdf_mesh_inventory(urdf_path: Path) -> None:
     """Print mesh inventory and per-mesh loading status for diagnosis."""
+    if not URDF_DIAG:
+        return
     print(f"[URDF-DIAG] inspecting meshes: {urdf_path}")
     try:
         root = ET.parse(str(urdf_path)).getroot()
@@ -99,6 +104,8 @@ def _log_urdf_mesh_inventory(urdf_path: Path) -> None:
 
 def _summarize_urdf_graph(urdf_path: Path) -> None:
     """Print URDF link/joint counts and visual/collision geometry breakdown."""
+    if not URDF_DIAG:
+        return
     try:
         root = ET.parse(str(urdf_path)).getroot()
     except Exception as e:
@@ -123,6 +130,8 @@ def _summarize_urdf_graph(urdf_path: Path) -> None:
 
 
 def _log_urdf_object_snapshot(urdf_obj: object, tag: str) -> None:
+    if not URDF_DIAG:
+        return
     n_meshes = len(getattr(urdf_obj, "_meshes", []))
     n_joints = len(getattr(urdf_obj, "_joint_frames", []))
     print(f"[URDF-SUM] {tag}: meshes={n_meshes} joints={n_joints}")

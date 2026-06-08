@@ -169,6 +169,99 @@ class G1HOI(G1MimicFuture):
             object_root_pos = object_root_pos + trans
         return root_pos, root_rot, object_root_pos, object_root_rot
 
+    def _apply_pair_vector_transform(self, vec, root_rot):
+        rot_offset = getattr(self.cfg.env, "motion_global_rot_offset_deg", [0.0, 0.0, 0.0])
+        if all(abs(v) < 1e-8 for v in rot_offset):
+            return vec
+        pair_rot = self._root_rot_offset_quat(root_rot, rot_offset)
+        return quat_rotate(pair_rot, vec)
+
+    def _apply_runtime_pair_vector_transform(self, env_ids, vec):
+        rot_quat = self._pair_level_rot[env_ids]
+        return quat_rotate(rot_quat, vec)
+
+    def _get_unified_motion_data(self):
+        if self.obs_type == 'student_future' and hasattr(self, '_tar_motion_steps_future'):
+            all_steps = torch.cat([self._tar_motion_steps_priv, self._tar_motion_steps_future])
+            num_priv_steps = self._tar_motion_steps_priv.shape[0]
+            num_future_steps = self._tar_motion_steps_future.shape[0]
+        else:
+            all_steps = self._tar_motion_steps_priv
+            num_priv_steps = self._tar_motion_steps_priv.shape[0]
+            num_future_steps = 0
+
+        total_steps = all_steps.shape[0]
+        assert total_steps > 0, "Invalid number of target observation steps"
+
+        motion_times = self._get_motion_times().unsqueeze(-1)
+        obs_motion_times = all_steps * self.dt + motion_times
+        motion_ids_tiled = torch.broadcast_to(self._motion_ids.unsqueeze(-1), obs_motion_times.shape)
+        env_ids_tiled = torch.arange(self.num_envs, device=self.device).unsqueeze(-1).expand(-1, total_steps).flatten()
+        motion_ids_tiled = motion_ids_tiled.flatten()
+        obs_motion_times = obs_motion_times.flatten()
+
+        root_pos, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, body_pos, root_pos_delta_local, root_rot_delta_local, object_root_pos, object_root_rot = self._motion_lib.calc_hoi_motion_frame(motion_ids_tiled, obs_motion_times)
+        root_rot = self._apply_human_root_rot_offset(root_rot)
+        object_root_rot = self._apply_object_root_rot_offset(object_root_rot)
+        object_root_pos = self._apply_object_root_pos_offset(object_root_pos, object_root_rot)
+        root_vel = self._apply_pair_vector_transform(root_vel, root_rot)
+        root_ang_vel = self._apply_pair_vector_transform(root_ang_vel, root_rot)
+        root_pos, root_rot, object_root_pos, object_root_rot = self._apply_pair_root_transform(root_pos, root_rot, object_root_pos, object_root_rot)
+        root_pos, root_rot, object_root_pos, object_root_rot = self._apply_runtime_pair_level_transform(env_ids_tiled, root_pos, root_rot, object_root_pos, object_root_rot)
+        root_vel = self._apply_runtime_pair_vector_transform(env_ids_tiled, root_vel)
+        root_ang_vel = self._apply_runtime_pair_vector_transform(env_ids_tiled, root_ang_vel)
+        root_pos[:, 2] += self.cfg.motion.height_offset
+        root_pos[:, :2] += self.episode_init_origin[env_ids_tiled, :2]
+
+        roll, pitch, yaw = euler_from_quaternion(root_rot)
+        roll = roll.reshape(self.num_envs, total_steps, 1)
+        pitch = pitch.reshape(self.num_envs, total_steps, 1)
+        yaw = yaw.reshape(self.num_envs, total_steps, 1)
+
+        root_vel_local = quat_rotate_inverse(root_rot, root_vel)
+        root_ang_vel_local = quat_rotate_inverse(root_rot, root_ang_vel)
+
+        whole_key_body_pos = body_pos[:, self._key_body_ids_motion, :]
+        whole_key_body_pos_global = convert_to_global_root_body_pos(root_pos=root_pos, root_rot=root_rot, body_pos=whole_key_body_pos)
+
+        root_pos = root_pos.reshape(self.num_envs, total_steps, root_pos.shape[-1])
+        root_vel = root_vel.reshape(self.num_envs, total_steps, root_vel.shape[-1])
+        root_rot = root_rot.reshape(self.num_envs, total_steps, root_rot.shape[-1])
+        root_ang_vel = root_ang_vel.reshape(self.num_envs, total_steps, root_ang_vel.shape[-1])
+        dof_pos = dof_pos.reshape(self.num_envs, total_steps, dof_pos.shape[-1])
+        dof_vel = dof_vel.reshape(self.num_envs, total_steps, dof_vel.shape[-1])
+        root_vel_local = root_vel_local.reshape(self.num_envs, total_steps, root_vel_local.shape[-1])
+        root_ang_vel_local = root_ang_vel_local.reshape(self.num_envs, total_steps, root_ang_vel_local.shape[-1])
+        root_pos_delta_local = root_pos_delta_local.reshape(self.num_envs, total_steps, root_pos_delta_local.shape[-1])
+        root_rot_delta_local = root_rot_delta_local.reshape(self.num_envs, total_steps, root_rot_delta_local.shape[-1])
+        whole_key_body_pos = whole_key_body_pos.reshape(self.num_envs, total_steps, -1)
+        whole_key_body_pos_global = whole_key_body_pos_global.reshape(self.num_envs, total_steps, -1)
+
+        root_pos_distance_to_target = root_pos - self.root_states[:, 0:3].reshape(self.num_envs, 1, -1)
+
+        return {
+            'root_pos': root_pos,
+            'root_vel': root_vel,
+            'root_rot': root_rot,
+            'root_ang_vel': root_ang_vel,
+            'dof_pos': dof_pos,
+            'dof_vel': dof_vel,
+            'body_pos': body_pos,
+            'root_pos_delta_local': root_pos_delta_local,
+            'root_rot_delta_local': root_rot_delta_local,
+            'roll': roll,
+            'pitch': pitch,
+            'yaw': yaw,
+            'root_vel_local': root_vel_local,
+            'root_ang_vel_local': root_ang_vel_local,
+            'whole_key_body_pos': whole_key_body_pos,
+            'whole_key_body_pos_global': whole_key_body_pos_global,
+            'root_pos_distance_to_target': root_pos_distance_to_target,
+            'num_priv_steps': num_priv_steps,
+            'num_future_steps': num_future_steps,
+            'total_steps': total_steps
+        }
+
     def _reset_ref_motion(self, env_ids, motion_ids=None):
         n = len(env_ids)
         if motion_ids is None:
@@ -186,11 +279,15 @@ class G1HOI(G1MimicFuture):
         root_rot = self._apply_human_root_rot_offset(root_rot)
         object_root_rot = self._apply_object_root_rot_offset(object_root_rot)
         object_root_pos = self._apply_object_root_pos_offset(object_root_pos, object_root_rot)
+        root_vel = self._apply_pair_vector_transform(root_vel, root_rot)
+        root_ang_vel = self._apply_pair_vector_transform(root_ang_vel, root_rot)
         root_pos, root_rot, object_root_pos, object_root_rot = self._apply_pair_root_transform(root_pos, root_rot, object_root_pos, object_root_rot)
         pair_rot, pair_trans = self._compute_runtime_pair_level_transform(root_pos, root_rot, body_pos, object_root_pos, object_root_rot)
         self._pair_level_rot[env_ids] = pair_rot
         self._pair_level_trans[env_ids] = pair_trans
         root_pos, root_rot, object_root_pos, object_root_rot = self._apply_runtime_pair_level_transform(env_ids, root_pos, root_rot, object_root_pos, object_root_rot)
+        root_vel = self._apply_runtime_pair_vector_transform(env_ids, root_vel)
+        root_ang_vel = self._apply_runtime_pair_vector_transform(env_ids, root_ang_vel)
         if not hasattr(self, "_printed_init_root_euler"):
             self._printed_init_root_euler = False
         if not self._printed_init_root_euler and root_rot.shape[0] > 0:
@@ -224,9 +321,13 @@ class G1HOI(G1MimicFuture):
         root_rot = self._apply_human_root_rot_offset(root_rot)
         object_root_rot = self._apply_object_root_rot_offset(object_root_rot)
         object_root_pos = self._apply_object_root_pos_offset(object_root_pos, object_root_rot)
+        root_vel = self._apply_pair_vector_transform(root_vel, root_rot)
+        root_ang_vel = self._apply_pair_vector_transform(root_ang_vel, root_rot)
         root_pos, root_rot, object_root_pos, object_root_rot = self._apply_pair_root_transform(root_pos, root_rot, object_root_pos, object_root_rot)
         env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
         root_pos, root_rot, object_root_pos, object_root_rot = self._apply_runtime_pair_level_transform(env_ids, root_pos, root_rot, object_root_pos, object_root_rot)
+        root_vel = self._apply_runtime_pair_vector_transform(env_ids, root_vel)
+        root_ang_vel = self._apply_runtime_pair_vector_transform(env_ids, root_ang_vel)
         root_pos[:, 2] += self.cfg.motion.height_offset
         root_pos[:, :2] += self.episode_init_origin[:, :2]
         
@@ -572,10 +673,15 @@ class G1HOI(G1MimicFuture):
             camera_props.width = 720*2
             camera_props.height = 480*2
             self._rendering_camera_handles = []
-            for i in range(self.num_envs):
+            self._rendering_camera_env_ids = []
+            num_record_envs = min(self.num_envs, int(getattr(self.cfg.env, "record_video_num_envs", 1)))
+            for i in range(num_record_envs):
                 cam_pos = np.array([2, 0, 0.3])
                 camera_handle = self.gym.create_camera_sensor(self.envs[i], camera_props)
+                if camera_handle == -1:
+                    continue
                 self._rendering_camera_handles.append(camera_handle)
+                self._rendering_camera_env_ids.append(i)
                 self.gym.set_camera_location(camera_handle, self.envs[i], gymapi.Vec3(*cam_pos), gymapi.Vec3(*0*cam_pos))
 
 
@@ -874,8 +980,14 @@ class G1HOI(G1MimicFuture):
         root_height_diff = torch.abs(self.root_states[:, 2] - self._ref_root_pos[:, 2])
         height_cutoff = root_height_diff > self.cfg.rewards.root_height_diff_threshold
 
-        roll_cut = torch.abs(self.roll) > self.cfg.rewards.termination_roll
-        pitch_cut = torch.abs(self.pitch) > self.cfg.rewards.termination_pitch
+        # Old absolute-world checks made global motion placement rotations trigger termination:
+        # roll_cut = torch.abs(self.roll) > self.cfg.rewards.termination_roll
+        # pitch_cut = torch.abs(self.pitch) > self.cfg.rewards.termination_pitch
+        ref_roll, ref_pitch, _ = euler_from_quaternion(self._ref_root_rot)
+        roll_diff = torch.atan2(torch.sin(self.roll - ref_roll), torch.cos(self.roll - ref_roll))
+        pitch_diff = torch.atan2(torch.sin(self.pitch - ref_pitch), torch.cos(self.pitch - ref_pitch))
+        roll_cut = torch.abs(roll_diff) > self.cfg.rewards.termination_roll
+        pitch_cut = torch.abs(pitch_diff) > self.cfg.rewards.termination_pitch
         self.reset_buf |= roll_cut
         self.reset_buf |= pitch_cut
         motion_end = self.episode_length_buf * self.dt >= self._motion_lib.get_motion_length(self._motion_ids)

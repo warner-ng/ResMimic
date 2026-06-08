@@ -94,14 +94,16 @@ OBJECT_SPAWN_Z_BIAS="${OBJECT_SPAWN_Z_BIAS:-0.0}"
 # 任务与训练
 TASK="${TASK:-g1_hoi_bike_cari4d}"  # bike 任务名
 PROJ_NAME="${PROJ_NAME:-bike}"
-EXPTID="${EXPTID:-bike_gui_train}"
+RUN_TIMESTAMP="${RUN_TIMESTAMP:-$(date +%Y%m%d_%H%M%S)}"
+EXPTID="${EXPTID:-bike_gui_train_${RUN_TIMESTAMP}}"
 DEVICE="${DEVICE:-cuda:0}"
-NUM_ENVS="${NUM_ENVS:-1}"
+NUM_ENVS="${NUM_ENVS:-4096}"
 WAND_ENTITY="${WAND_ENTITY:-warner0709-shanghai-ai-lab}"
-TRAIN_HEADLESS="${TRAIN_HEADLESS:-0}"  # 0=默认有头训练，1=headless训练
-TRAIN_MAX_ITERATIONS="${TRAIN_MAX_ITERATIONS:-900}"
-TRAIN_RECORD_VIDEO="${TRAIN_RECORD_VIDEO:-1}"  # 1=训练中每隔 WANDB_VIDEO_INTERVAL 上传一次视频到 wandb
-WANDB_VIDEO_INTERVAL="${WANDB_VIDEO_INTERVAL:-500}"
+TRAIN_HEADLESS="${TRAIN_HEADLESS:-1}"  # 0=默认有头训练，1=headless训练
+TRAIN_MAX_ITERATIONS="${TRAIN_MAX_ITERATIONS:-9000}"
+TRAIN_RECORD_VIDEO="${TRAIN_RECORD_VIDEO:-1}"  # 1=训练每隔 TRAIN_EVAL_VIDEO_INTERVAL 轮调用 eval 录视频
+TRAIN_EVAL_VIDEO_INTERVAL="${TRAIN_EVAL_VIDEO_INTERVAL:-100}"
+DISABLE_TERMINATION_FOR_DEBUG="${DISABLE_TERMINATION_FOR_DEBUG:-0}"  # 1=训练时关闭 termination，0=正常 termination
 
 # 载入 IsaacGym 后的全局偏移请手动改这里：
 #   /home/warner/_projects/ResMimic/legged_gym/legged_gym/envs/g1/g1_hoi_bike_cari4d_config.py
@@ -469,8 +471,15 @@ TRAIN_ARGS=(
 if [[ "$TRAIN_HEADLESS" == "1" ]]; then
   TRAIN_ARGS+=(--headless)
 fi
-if [[ "$TRAIN_RECORD_VIDEO" == "1" ]]; then
-  TRAIN_ARGS+=(--record_video)
+if [[ "$DISABLE_TERMINATION_FOR_DEBUG" == "1" ]]; then
+  TRAIN_ARGS+=(--disable_termination_for_debug)
 fi
-export WANDB_VIDEO_INTERVAL
+export TRAIN_EVAL_RECORD_VIDEO="$TRAIN_RECORD_VIDEO"
+export TRAIN_EVAL_VIDEO_INTERVAL
+export TRAIN_EVAL_TASK="$TASK"
+export TRAIN_EVAL_PROJ_NAME="$PROJ_NAME"
+export TRAIN_EVAL_EXPTID="$EXPTID"
+export TRAIN_EVAL_WAND_ENTITY="$WAND_ENTITY"
+export TRAIN_EVAL_DEVICE="$DEVICE"
+export TRAIN_EVAL_NUM_ENVS=1
 python "$RESMIMIC_ROOT/legged_gym/legged_gym/scripts/train.py" "${TRAIN_ARGS[@]}"

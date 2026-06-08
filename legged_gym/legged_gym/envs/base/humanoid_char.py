@@ -77,10 +77,15 @@ class HumanoidChar(LeggedRobot):
             camera_props.width = 720*2
             camera_props.height = 480*2
             self._rendering_camera_handles = []
-            for i in range(self.num_envs):
+            self._rendering_camera_env_ids = []
+            num_record_envs = min(self.num_envs, int(getattr(self.cfg.env, "record_video_num_envs", 1)))
+            for i in range(num_record_envs):
                 cam_pos = np.array([2, 0, 0.3])
                 camera_handle = self.gym.create_camera_sensor(self.envs[i], camera_props)
+                if camera_handle == -1:
+                    continue
                 self._rendering_camera_handles.append(camera_handle)
+                self._rendering_camera_env_ids.append(i)
                 self.gym.set_camera_location(camera_handle, self.envs[i], gymapi.Vec3(*cam_pos), gymapi.Vec3(*0*cam_pos))
                 
     def render_record(self, mode="rgb_array"):
@@ -88,12 +93,14 @@ class HumanoidChar(LeggedRobot):
         # self.gym.clear_lines(self.viewer)
         self.gym.render_all_camera_sensors(self.sim)
         imgs = []
-        for i in range(self.num_envs):
-            cam = self._rendering_camera_handles[i]
-            root_pos = self.root_states[i, :3].cpu().numpy()
+        camera_env_ids = getattr(self, "_rendering_camera_env_ids", list(range(len(self._rendering_camera_handles))))
+        for cam, env_id in zip(self._rendering_camera_handles, camera_env_ids):
+            if cam == -1:
+                continue
+            root_pos = self.root_states[env_id, :3].cpu().numpy()
             cam_pos = root_pos + np.array([0, -1.5, 0.3])
-            self.gym.set_camera_location(cam, self.envs[i], gymapi.Vec3(*cam_pos), gymapi.Vec3(*root_pos))
-            img = self.gym.get_camera_image(self.sim, self.envs[i], cam, gymapi.IMAGE_COLOR)
+            self.gym.set_camera_location(cam, self.envs[env_id], gymapi.Vec3(*cam_pos), gymapi.Vec3(*root_pos))
+            img = self.gym.get_camera_image(self.sim, self.envs[env_id], cam, gymapi.IMAGE_COLOR)
             w, h = img.shape
             imgs.append(img.reshape([w, h // 4, 4]))
                 
