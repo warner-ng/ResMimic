@@ -112,7 +112,7 @@ class G1HOI(G1MimicFuture):
 
     def _apply_object_root_rot_offset(self, root_rot):
         offset_deg = getattr(self.cfg.env, "object_root_rot_offset_deg", [0.0, 0.0, 0.0])
-        root_rot = self._apply_root_rot_offset(root_rot, offset_deg)
+        root_rot = self._apply_root_local_axes_rot_offset(root_rot, offset_deg)
         local_offset_deg = getattr(self.cfg.env, "object_root_local_rot_offset_deg", [0.0, 0.0, 0.0])
         return self._apply_root_local_rot_offset(root_rot, local_offset_deg)
 
@@ -127,6 +127,29 @@ class G1HOI(G1MimicFuture):
             return root_rot
         offset_quat = self._root_rot_offset_quat(root_rot, offset_deg)
         return quat_mul(root_rot, offset_quat)
+
+    def _apply_root_local_axes_rot_offset(self, root_rot, offset_deg):
+        if all(abs(v) < 1e-8 for v in offset_deg):
+            return root_rot
+        offset = torch.tensor(offset_deg, device=root_rot.device, dtype=root_rot.dtype) * (torch.pi / 180.0)
+        n = root_rot.shape[0]
+        local_axes = torch.eye(3, device=root_rot.device, dtype=root_rot.dtype).unsqueeze(0).expand(n, -1, -1)
+        root_rot_axes = root_rot.unsqueeze(1).expand(-1, 3, -1).reshape(-1, 4)
+        world_axes = quat_rotate(root_rot_axes, local_axes.reshape(-1, 3)).reshape(n, 3, 3)
+        qx = torch_utils.quat_from_angle_axis(
+            torch.full((n,), offset[0], device=root_rot.device, dtype=root_rot.dtype),
+            world_axes[:, 0, :],
+        )
+        qy = torch_utils.quat_from_angle_axis(
+            torch.full((n,), offset[1], device=root_rot.device, dtype=root_rot.dtype),
+            world_axes[:, 1, :],
+        )
+        qz = torch_utils.quat_from_angle_axis(
+            torch.full((n,), offset[2], device=root_rot.device, dtype=root_rot.dtype),
+            world_axes[:, 2, :],
+        )
+        offset_quat = quat_mul(qz, quat_mul(qy, qx))
+        return quat_mul(offset_quat, root_rot)
 
     def _root_rot_offset_quat(self, root_rot, offset_deg):
         offset = torch.tensor(offset_deg, device=root_rot.device, dtype=root_rot.dtype) * (torch.pi / 180.0)

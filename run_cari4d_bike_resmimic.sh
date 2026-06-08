@@ -44,31 +44,31 @@ PAIR_SUFFIX="${PAIR_SUFFIX:-bikez}"  # <<< 改这里
 # 先改object scale，再改object rpy
 
 # ===== object scale 统一缩放系数：同时作用于 IsaacGym 与 viser =====
-OBJECT_SCALE="${OBJECT_SCALE:-0.4}"  
+OBJECT_SCALE="${OBJECT_SCALE:-0.6}"  
 
 # ===== object 单独 rpy 旋转 =====
-# ROOT_ROT 是世界坐标系旋转，左乘：q = q_offset * q_motion。
-# 这里仍然有bug，等之后找网上开源代码修
-OBJECT_ROOT_ROT_ROLL_DEG="${OBJECT_ROOT_ROT_ROLL_DEG:--90.0}"
-OBJECT_ROOT_ROT_PITCH_DEG="${OBJECT_ROOT_ROT_PITCH_DEG:-0.0}"
-OBJECT_ROOT_ROT_YAW_DEG="${OBJECT_ROOT_ROT_YAW_DEG:--60.0}"
+# 沿 object root 当前局部轴旋转：红轴=X=roll，绿轴=Y=pitch，蓝轴=Z=yaw。
+# 输入仍是角度；内部先取当前三根局部轴，再分别生成 axis-angle quaternion，不走 Euler 角。
+OBJECT_ROOT_ROT_ROLL_DEG="${OBJECT_ROOT_ROT_ROLL_DEG:--90.0}" # 红轴
+OBJECT_ROOT_ROT_PITCH_DEG="${OBJECT_ROOT_ROT_PITCH_DEG:-60.0}" # 蓝轴
+OBJECT_ROOT_ROT_YAW_DEG="${OBJECT_ROOT_ROT_YAW_DEG:--0.0}" # 绿轴
 
 # ===== object 单独 xyz 平移 =====
 # 沿 object root 的局部坐标轴平移；Isaac 和 viser 同时生效。
-OBJECT_ROOT_POS_OFFSET_X="${OBJECT_ROOT_POS_OFFSET_X:--0.6}" # object 局部红轴
-OBJECT_ROOT_POS_OFFSET_Y="${OBJECT_ROOT_POS_OFFSET_Y:-0}" # object 局部绿轴
-OBJECT_ROOT_POS_OFFSET_Z="${OBJECT_ROOT_POS_OFFSET_Z:-0.1}" # object 局部蓝轴
+OBJECT_ROOT_POS_OFFSET_X="${OBJECT_ROOT_POS_OFFSET_X:--0.65}" # object 局部红轴
+OBJECT_ROOT_POS_OFFSET_Y="${OBJECT_ROOT_POS_OFFSET_Y:--0.25}" # object 局部绿轴
+OBJECT_ROOT_POS_OFFSET_Z="${OBJECT_ROOT_POS_OFFSET_Z:-0}" # object 局部蓝轴
 
 # ===== human + object 总体 rpy 旋转 =====
 # pair-level：绕世界坐标系同时旋转 human/object 的 root 位置和姿态。
-HUMAN_OBJECT_ROOT_ROT_ROLL_DEG="${HUMAN_OBJECT_ROOT_ROT_ROLL_DEG:--90.0}"
-HUMAN_OBJECT_ROOT_ROT_PITCH_DEG="${HUMAN_OBJECT_ROOT_ROT_PITCH_DEG:-0}"
-HUMAN_OBJECT_ROOT_ROT_YAW_DEG="${HUMAN_OBJECT_ROOT_ROT_YAW_DEG:-0.0}"
+HUMAN_OBJECT_ROOT_ROT_ROLL_DEG="${HUMAN_OBJECT_ROOT_ROT_ROLL_DEG:--85.0}"
+HUMAN_OBJECT_ROOT_ROT_PITCH_DEG="${HUMAN_OBJECT_ROOT_ROT_PITCH_DEG:-90}" # 蓝色轴
+HUMAN_OBJECT_ROOT_ROT_YAW_DEG="${HUMAN_OBJECT_ROOT_ROT_YAW_DEG:-0.0}" # 红色轴
 
 # ===== human + object 总体 xyz 平移 =====
 # 总体 xyz 手动控制（pair-level 全局平移），同时作用于 human/object。
 # RUNTIME_PAIR_LEVEL_TARGET_Z 仅控制 pair leveling 后的落地高度（若开启 leveling）。
-HUMAN_OBJECT_ROOT_TRANS_X="${HUMAN_OBJECT_ROOT_TRANS_X:-0.0}"
+HUMAN_OBJECT_ROOT_TRANS_X="${HUMAN_OBJECT_ROOT_TRANS_X:--3.0}"
 HUMAN_OBJECT_ROOT_TRANS_Y="${HUMAN_OBJECT_ROOT_TRANS_Y:-0.0}"
 HUMAN_OBJECT_ROOT_TRANS_Z="${HUMAN_OBJECT_ROOT_TRANS_Z:-1.0}"
 ENABLE_RUNTIME_PAIR_LEVELING="${ENABLE_RUNTIME_PAIR_LEVELING:-0}"
@@ -85,7 +85,7 @@ HUMAN_ROOT_ROT_YAW_DEG="${HUMAN_ROOT_ROT_YAW_DEG:-0.0}"
 # ===== IsaacGym 生成高度 =====
 # 只影响 IsaacGym reset 时真实 actor 的 spawn 高度，不改 motion/ref 高度。
 HUMAN_SPAWN_Z_BIAS="${HUMAN_SPAWN_Z_BIAS:-0.0}"
-OBJECT_SPAWN_Z_BIAS="${OBJECT_SPAWN_Z_BIAS:-0.0}"
+OBJECT_SPAWN_Z_BIAS="${OBJECT_SPAWN_Z_BIAS:-0.2}"
 
 # ===== 之所以没有human 单独 xyz，是因为调了object就不用调human了 =====
 
@@ -355,29 +355,33 @@ motion_line = f'motion_file = f"{{REPO_ROOT_DIR}}/assets/motions/{tag}_human_upr
 obj_line = f'object_motion_file = f"{{REPO_ROOT_DIR}}/assets/motions/{tag}_object_upright_{pair}_aligned.npz"'
 object_scale = float(os.environ["OBJECT_SCALE"])
 
-s = re.sub(r'^\s*motion_file\s*=\s*f"\{REPO_ROOT_DIR\}/assets/motions/.*?"\s*$', '        ' + motion_line, s, flags=re.MULTILINE)
-s = re.sub(r'^\s*object_motion_file\s*=\s*f"\{REPO_ROOT_DIR\}/assets/motions/.*?"\s*$', '        ' + obj_line, s, flags=re.MULTILINE)
-s = re.sub(r'^\s*enable_runtime_pair_leveling\s*=\s*(True|False)\s*$', '        enable_runtime_pair_leveling = ' + enable_pair_leveling, s, flags=re.MULTILINE)
-s = re.sub(r'^\s*runtime_pair_level_target_z\s*=\s*[-0-9.]+\s*$', f'        runtime_pair_level_target_z = {pair_level_target_z:.3f}', s, flags=re.MULTILINE)
-s = re.sub(r'^\s*human_root_z_bias\s*=\s*[-0-9.]+\s*$', f'        human_root_z_bias = {human_root_z_bias:.3f}', s, flags=re.MULTILINE)
-s = re.sub(r'^\s*object_root_z_bias\s*=\s*[-0-9.]+\s*$', f'        object_root_z_bias = {object_root_z_bias:.3f}', s, flags=re.MULTILINE)
-s = re.sub(r'^\s*object_root_pos_offset\s*=\s*\[.*?\]\s*$', '        object_root_pos_offset = ' + object_root_pos_offset, s, flags=re.MULTILINE)
-s = re.sub(r'^\s*motion_global_rot_offset_deg\s*=\s*\[.*?\]\s*$', '        motion_global_rot_offset_deg = ' + pair_root_rot, s, flags=re.MULTILINE)
-s = re.sub(r'^\s*motion_global_pos_offset\s*=\s*\[.*?\]\s*$', '        motion_global_pos_offset = ' + pair_root_pos_offset, s, flags=re.MULTILINE)
-s = re.sub(r'^\s*object_urdf_file\s*=\s*".*?"\s*$', '        object_urdf_file = "' + object_urdf_file + '"', s, flags=re.MULTILINE)
-s = re.sub(r'^\s*object_obj_file\s*=\s*".*?"\s*$', '        object_obj_file = "' + object_obj_file + '"', s, flags=re.MULTILINE)
-if re.search(r'^\s*object_scale\s*=.*$', s, flags=re.MULTILINE):
-    s = re.sub(r'^\s*object_scale\s*=\s*.*?\s*$', f'        object_scale = {object_scale:.3f}', s, flags=re.MULTILINE)
+def replace_assignment(text, name, value):
+    pattern = rf'^(\s*{re.escape(name)}\s*=\s*).*?(\s*(?:#.*)?)$'
+    return re.sub(pattern, lambda m: f"{m.group(1)}{value}{m.group(2)}", text, flags=re.MULTILINE)
+
+s = replace_assignment(s, "motion_file", motion_line)
+s = replace_assignment(s, "object_motion_file", obj_line)
+s = replace_assignment(s, "enable_runtime_pair_leveling", enable_pair_leveling)
+s = replace_assignment(s, "runtime_pair_level_target_z", f"{pair_level_target_z:.3f}")
+s = replace_assignment(s, "human_root_z_bias", f"{human_root_z_bias:.3f}")
+s = replace_assignment(s, "object_root_z_bias", f"{object_root_z_bias:.3f}")
+s = replace_assignment(s, "object_root_pos_offset", object_root_pos_offset)
+s = replace_assignment(s, "motion_global_rot_offset_deg", pair_root_rot)
+s = replace_assignment(s, "motion_global_pos_offset", pair_root_pos_offset)
+s = replace_assignment(s, "object_urdf_file", '"' + object_urdf_file + '"')
+s = replace_assignment(s, "object_obj_file", '"' + object_obj_file + '"')
+if re.search(r'^\s*object_scale\s*=', s, flags=re.MULTILINE):
+    s = replace_assignment(s, "object_scale", f"{object_scale:.3f}")
 else:
     s = s.replace(
         f'        object_obj_file = "{object_obj_file}"',
         f'        object_obj_file = "{object_obj_file}"\n        object_scale = {object_scale:.3f}',
         1
     )
-s = re.sub(r'^\s*human_root_rot_offset_deg\s*=\s*\[.*?\]\s*$', '        human_root_rot_offset_deg = ' + human_root_rot, s, flags=re.MULTILINE)
-s = re.sub(r'^\s*object_root_rot_offset_deg\s*=\s*\[.*?\]\s*$', '        object_root_rot_offset_deg = ' + object_root_rot, s, flags=re.MULTILINE)
-s = re.sub(r'^\s*object_root_local_rot_offset_deg\s*=\s*\[.*?\]\s*$', '        object_root_local_rot_offset_deg = [0.0, 0.0, 0.0]', s, flags=re.MULTILINE)
-s = re.sub(r'^\s*object_motion_rot_offset_deg\s*=\s*\[.*?\]\s*$', '        object_motion_rot_offset_deg = [0.0, 0.0, 0.0]', s, flags=re.MULTILINE)
+s = replace_assignment(s, "human_root_rot_offset_deg", human_root_rot)
+s = replace_assignment(s, "object_root_rot_offset_deg", object_root_rot)
+s = replace_assignment(s, "object_root_local_rot_offset_deg", "[0.0, 0.0, 0.0]")
+s = replace_assignment(s, "object_motion_rot_offset_deg", "[0.0, 0.0, 0.0]")
 
 with open(cfg, "w", encoding="utf-8") as f:
     f.write(s)

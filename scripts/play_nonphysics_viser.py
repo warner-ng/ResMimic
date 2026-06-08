@@ -350,6 +350,21 @@ def apply_root_local_rot_offset_xyzw(root_rot_xyzw: np.ndarray, offset_deg: Tupl
     return np.stack([quat_mul_xyzw(q, offset_q) for q in root_rot_xyzw], axis=0)
 
 
+def apply_root_local_axes_rot_offset_xyzw(root_rot_xyzw: np.ndarray, offset_deg: Tuple[float, float, float]) -> np.ndarray:
+    if np.allclose(np.asarray(offset_deg, dtype=np.float64), 0.0):
+        return root_rot_xyzw.copy()
+    angles = np.deg2rad(np.asarray(offset_deg, dtype=np.float64))
+    out = []
+    for q in root_rot_xyzw:
+        axes = R.from_quat(q).apply(np.eye(3, dtype=np.float64))
+        qx = R.from_rotvec(angles[0] * axes[0]).as_quat()
+        qy = R.from_rotvec(angles[1] * axes[1]).as_quat()
+        qz = R.from_rotvec(angles[2] * axes[2]).as_quat()
+        offset_q = quat_mul_xyzw(qz, quat_mul_xyzw(qy, qx))
+        out.append(quat_mul_xyzw(offset_q, q))
+    return np.stack(out, axis=0)
+
+
 def compute_pair_level_transform(
     root_pos: np.ndarray,
     root_rot_xyzw: np.ndarray,
@@ -683,7 +698,7 @@ def main():
         root_rot_xyzw,
         (args.human_root_rot_roll_deg, args.human_root_rot_pitch_deg, args.human_root_rot_yaw_deg),
     )
-    obj_rot_xyzw = apply_root_rot_offset_xyzw(
+    obj_rot_xyzw = apply_root_local_axes_rot_offset_xyzw(
         obj_rot_xyzw,
         (args.object_root_rot_roll_deg, args.object_root_rot_pitch_deg, args.object_root_rot_yaw_deg),
     )
