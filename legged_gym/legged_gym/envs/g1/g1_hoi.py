@@ -1054,11 +1054,8 @@ class G1HOI(G1MimicFuture):
             # self.deviate_tracking_frames[~lose_tracking] = 0
             # pose_fail = self.deviate_tracking_frames >= self.cfg.motion.reset_consec_frames # 50 frames = 1 second
             
-            # use a fixed pose termination distance
+            # Reset only after sustained tracking failure, so early training can explore.
             pose_fail = body_pos_dist > self._pose_termination_dist ** 2
-            
-            # use an adaptive pose termination distance
-            # pose_fail = body_pos_dist > self.motion_termination_dist[self._motion_ids] ** 2
             
             if self._track_root:
                 root_pos_diff = self._ref_root_pos[:, 0:2] - self.root_states[:, 0:2]
@@ -1066,6 +1063,11 @@ class G1HOI(G1MimicFuture):
                 root_pos_fail = root_pos_dist > self._root_tracking_termination_dist ** 2
                 root_pos_fail = root_pos_fail.squeeze(-1)
                 pose_fail |= root_pos_fail
+            pose_termination_frames = int(getattr(self.cfg.env, "pose_termination_consecutive_frames", 1))
+            if pose_termination_frames > 1:
+                self.deviate_tracking_frames[pose_fail] += 1
+                self.deviate_tracking_frames[~pose_fail] = 0
+                pose_fail = self.deviate_tracking_frames >= pose_termination_frames
             self.reset_buf |= pose_fail
         
         first_step = self.episode_length_buf == 0
