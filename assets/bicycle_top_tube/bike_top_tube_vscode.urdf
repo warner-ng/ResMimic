@@ -110,15 +110,15 @@
       <inertia ixx="0.002" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.002"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="-0.84811 0.08 -0.567533" rpy="0 0 0"/>
       <geometry>
-        <box size="0.02 0.4 0.02"/>
+        <box size="0.12 1.2 0.02"/>
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="-0.84811 0.08 -0.567533" rpy="0 0 0"/>
       <geometry>
-        <box size="0.02 0.4 0.02"/>
+        <box size="0.12 1.2 0.02"/>
       </geometry>
     </collision>
   </link>
@@ -130,15 +130,15 @@
       <inertia ixx="0.002" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.002"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="-0.84811 -0.08 -0.567533" rpy="0 0 0"/>
       <geometry>
-        <box size="0.02 0.4 0.02"/>
+        <box size="0.12 1.2 0.02"/>
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="-0.84811 -0.08 -0.567533" rpy="0 0 0"/>
       <geometry>
-        <box size="0.02 0.4 0.02"/>
+        <box size="0.12 1.2 0.02"/>
       </geometry>
     </collision>
   </link>
@@ -165,13 +165,13 @@
   </joint>
 
   <joint name="RearSupportLeft" type="fixed">
-    <origin xyz="-0.84811 0.08 -0.567533" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <parent link="frame"/>
     <child link="rear_support_left"/>
   </joint>
 
   <joint name="RearSupportRight" type="fixed">
-    <origin xyz="-0.84811 -0.08 -0.567533" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <parent link="frame"/>
     <child link="rear_support_right"/>
   </joint>

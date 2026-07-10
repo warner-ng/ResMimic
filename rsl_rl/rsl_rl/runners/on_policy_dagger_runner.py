@@ -321,7 +321,8 @@ class OnPolicyDaggerRunner:
                     actions = self.alg.act(obs, critic_obs, infos, hist_encoding)
                     if self.use_residual_policy:
                         # warmup_alpha = min(1.0, self.current_learning_iteration / self.warmup_steps)
-                        final_actions = actions + base_actions
+                        # final_actions = actions + base_actions
+                        final_actions = base_actions
                         obs, privileged_obs, rewards, dones, infos = self.env.step(final_actions)
                     else:
                         obs, privileged_obs, rewards, dones, infos = self.env.step(actions)

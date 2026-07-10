@@ -6,18 +6,6 @@
       <mass value="0.001"/>
       <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
     </inertial>
-    <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry>
-        <sphere radius="0.03"/>
-      </geometry>
-    </visual>
-    <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry>
-        <sphere radius="0.03"/>
-      </geometry>
-    </collision>
   </link>
 
   <joint name="bike_root_to_mesh" type="fixed">
@@ -47,53 +35,53 @@
   </link>
 
   <joint name="RearSupportLeft" type="fixed">
-    <origin xyz="-0.2 -1 -1.05" rpy="0 0 1.5"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <parent link="bike_root"/>
     <child link="rear_support_left"/>
   </joint>
 
   <link name="rear_support_left">
     <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="-0.2 -1 -1.0" rpy="0 0 1.5"/>
       <mass value="0.3"/>
       <inertia ixx="0.002" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.002"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="-0.2 -1 -1.0" rpy="0 0 1.5"/>
       <geometry>
-        <box size="0.02 0.4 0.02"/>
+        <box size="0.12 1.2 0.02"/>
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="-0.2 -1 -1.0" rpy="0 0 1.5"/>
       <geometry>
-        <box size="0.02 0.4 0.02"/>
+        <box size="0.12 1.2 0.02"/>
       </geometry>
     </collision>
   </link>
 
   <joint name="RearSupportRight" type="fixed">
-    <origin xyz="0.2 -1 -1.05" rpy="0 0 1.5"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <parent link="bike_root"/>
     <child link="rear_support_right"/>
   </joint>
 
   <link name="rear_support_right">
     <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="0.2 -1 -1.0" rpy="0 0 1.5"/>
       <mass value="0.3"/>
       <inertia ixx="0.002" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.002"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="0.2 -1 -1.0" rpy="0 0 1.5"/>
       <geometry>
-        <box size="0.02 0.4 0.02"/>
+        <box size="0.12 1.2 0.02"/>
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="0.2 -1 -1.0" rpy="0 0 1.5"/>
       <geometry>
-        <box size="0.02 0.4 0.02"/>
+        <box size="0.12 1.2 0.02"/>
       </geometry>
     </collision>
   </link>

@@ -36,6 +36,7 @@ class G1HOIBikeCari4DCfg(G1HOICfg):
         class scales(G1HOICfg.rewards.scales):
             tracking_joint_dof = 2.0
             tracking_joint_vel = 0.2
+            tracking_root_translation_xy = 5.0
             tracking_root_translation_z = 1.0
             tracking_root_rotation = 1.0
             tracking_root_linear_vel = 1.0
@@ -74,6 +75,7 @@ class G1HOIBikeCari4DCfgDAgger(G1HOICfgDAgger):
         class scales(G1HOICfgDAgger.rewards.scales):
             tracking_joint_dof = 2.0
             tracking_joint_vel = 0.2
+            tracking_root_translation_xy = 5.0
             tracking_root_translation_z = 1.0
             tracking_root_rotation = 1.0
             tracking_root_linear_vel = 1.0

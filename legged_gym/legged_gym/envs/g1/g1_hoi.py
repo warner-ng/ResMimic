@@ -504,8 +504,8 @@ class G1HOI(G1MimicFuture):
         self.object_points = object_points
 
         if self.num_actors == 3:
-            self.plate_size_x = 0.4   # meters
-            self.plate_size_y = 0.3
+            self.plate_size_x = 0.8   # meters
+            self.plate_size_y = 0.6
             self.plate_thickness = 0.01
             asset_opts = gymapi.AssetOptions()
             asset_opts.fix_base_link = True       # <-- makes it static
